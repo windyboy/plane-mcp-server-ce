@@ -18,12 +18,19 @@ from plane.models.projects import (
     PaginatedProjectMemberResponse,
     Project,
     ProjectFeature,
+    ProjectLite,
+    ProjectMember,
     ProjectWorklogSummary,
     UpdateProject,
 )
-from plane.models.query_params import ProjectLiteListQueryParams
-from plane.models.query_params import MemberListQueryParams
+from plane.models.query_params import (
+    MemberListQueryParams,
+    MemberQueryParams,
+    PaginatedQueryParams,
+    ProjectLiteListQueryParams,
+)
 
+from plane_mcp.ce_compat import list_to_paginated, lite_or_fallback, reshape_paginated
 from plane_mcp.client import get_plane_client_context
 
 
@@ -53,11 +60,26 @@ def register_project_tools(mcp: FastMCP) -> None:
         """
         client, workspace_slug = get_plane_client_context()
 
-        params = ProjectLiteListQueryParams(
-            cursor=cursor, per_page=per_page, order_by=order_by, include_archived=False
-        )
+        params = ProjectLiteListQueryParams(cursor=cursor, per_page=per_page, order_by=order_by, include_archived=False)
 
-        return client.projects.list_lite(workspace_slug=workspace_slug, params=params)
+        # CE has no `projects-lite` endpoint (404) -> fall back to the full
+        # `projects` list and reshape into the lite envelope. See ce_compat.py.
+        def _full() -> PaginatedProjectLiteResponse:
+            full = client.projects.list(
+                workspace_slug=workspace_slug,
+                params=PaginatedQueryParams(cursor=cursor, per_page=per_page, order_by=order_by),
+            )
+            return reshape_paginated(
+                full,
+                PaginatedProjectLiteResponse,
+                ProjectLite,
+                keep=lambda it: it.get("archived_at") is None,
+            )
+
+        return lite_or_fallback(
+            lambda: client.projects.list_lite(workspace_slug=workspace_slug, params=params),
+            _full,
+        )
 
     @mcp.tool()
     def create_project(
@@ -341,8 +363,31 @@ def register_project_tools(mcp: FastMCP) -> None:
             per_page=per_page,
             order_by=order_by,
         )
-        return client.projects.get_members_lite(
-            workspace_slug=workspace_slug, project_id=project_id, params=params
+
+        # CE has no `project-members-lite` endpoint (404) -> fall back to the
+        # full `project-members` list (bare list) wrapped into the lite envelope.
+        def _full() -> PaginatedProjectMemberResponse:
+            members = client.projects.get_members(
+                workspace_slug=workspace_slug,
+                project_id=project_id,
+                params=MemberQueryParams(
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    display_name=display_name,
+                    role_slug=role_slug,
+                    is_active=is_active,
+                    is_bot=is_bot,
+                    order_by=order_by,
+                ),
+            )
+            return list_to_paginated(members, PaginatedProjectMemberResponse, ProjectMember)
+
+        return lite_or_fallback(
+            lambda: client.projects.get_members_lite(
+                workspace_slug=workspace_slug, project_id=project_id, params=params
+            ),
+            _full,
         )
 
     @mcp.tool()

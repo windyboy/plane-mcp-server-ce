@@ -9,6 +9,7 @@ from plane.errors.errors import HttpError
 from plane.models.cycles import (
     CreateCycle,
     Cycle,
+    CycleLite,
     PaginatedArchivedCycleResponse,
     PaginatedCycleLiteResponse,
     PaginatedCycleWorkItemResponse,
@@ -19,6 +20,7 @@ from plane.models.enums import CycleStatusEnum
 from plane.models.query_params import CycleLiteListQueryParams, LiteListQueryParams, WorkItemQueryParams
 from pydantic import Field
 
+from plane_mcp.ce_compat import list_to_paginated, lite_or_fallback, reshape_paginated
 from plane_mcp.client import get_plane_client_context
 from plane_mcp.tools.pql_reference import PQL_FIELD_HINT, PQL_FULL_REFERENCE
 
@@ -64,7 +66,29 @@ def register_cycle_tools(mcp: FastMCP) -> None:
                 params=params.model_dump(exclude_none=True),
             )
         params = CycleLiteListQueryParams(cursor=cursor, per_page=per_page, order_by=order_by, status=status)
-        return client.cycles.list_lite(workspace_slug=workspace_slug, project_id=project_id, params=params)
+
+        # CE has no `cycles-lite` endpoint (404) -> fall back to the full
+        # `cycles` list and reshape into the lite envelope. See ce_compat.py.
+        def _full() -> PaginatedCycleLiteResponse:
+            full_params = {
+                k: v
+                for k, v in {
+                    "cursor": cursor,
+                    "per_page": per_page,
+                    "order_by": order_by,
+                    "status": status.value if status is not None else None,
+                }.items()
+                if v is not None
+            }
+            full = client.cycles.list(workspace_slug=workspace_slug, project_id=project_id, params=full_params or None)
+            if isinstance(full, list):  # status=current returns a bare list
+                return list_to_paginated(full, PaginatedCycleLiteResponse, CycleLite)
+            return reshape_paginated(full, PaginatedCycleLiteResponse, CycleLite)
+
+        return lite_or_fallback(
+            lambda: client.cycles.list_lite(workspace_slug=workspace_slug, project_id=project_id, params=params),
+            _full,
+        )
 
     @mcp.tool()
     def create_cycle(

@@ -9,6 +9,7 @@ from plane.models.enums import ModuleStatusEnum
 from plane.models.modules import (
     CreateModule,
     Module,
+    ModuleLite,
     PaginatedArchivedModuleResponse,
     PaginatedModuleLiteResponse,
     PaginatedModuleWorkItemResponse,
@@ -17,6 +18,7 @@ from plane.models.modules import (
 from plane.models.query_params import LiteListQueryParams, WorkItemQueryParams
 from pydantic import Field
 
+from plane_mcp.ce_compat import lite_or_fallback, reshape_paginated
 from plane_mcp.client import get_plane_client_context
 from plane_mcp.tools.pql_reference import PQL_FIELD_HINT, PQL_FULL_REFERENCE
 
@@ -57,8 +59,20 @@ def register_module_tools(mcp: FastMCP) -> None:
                 project_id=project_id,
                 params=params.model_dump(exclude_none=True),
             )
-        return client.modules.list_lite(
-            workspace_slug=workspace_slug, project_id=project_id, params=params
+
+        # CE has no `modules-lite` endpoint (404) -> fall back to the full
+        # `modules` list and reshape into the lite envelope. See ce_compat.py.
+        def _full() -> PaginatedModuleLiteResponse:
+            full = client.modules.list(
+                workspace_slug=workspace_slug,
+                project_id=project_id,
+                params=params.model_dump(exclude_none=True),
+            )
+            return reshape_paginated(full, PaginatedModuleLiteResponse, ModuleLite)
+
+        return lite_or_fallback(
+            lambda: client.modules.list_lite(workspace_slug=workspace_slug, project_id=project_id, params=params),
+            _full,
         )
 
     @mcp.tool()
