@@ -190,7 +190,7 @@ errors. The detailed endpoint evidence is maintained in [CE_COMPAT.md](CE_COMPAT
 | Capability group | Available in CE mode | Notes |
 |---|---:|---|
 | Projects, members, cycles, modules, labels, states, intake items | Yes | CE-compatible endpoints, including the CE fallback for `*-lite` lists. |
-| Work items, search, activities, comments, links, attachments | Yes | Detail reads automatically expand assignees and labels. |
+| Work items, search, activities, comments, links, attachments | Yes | Detail reads automatically expand assignees and labels. `list_work_items` deliberately does **not** expose `pql` in CE mode: the CE API silently ignores it. |
 | Work item relations | Partial | Listing and creating the eight built-in relation types work; CE stable exposes no deletion route. |
 | Work item property definitions and options | Partial | Definition tools remain exposed; per-item property values are not available. |
 | Feature flags, roles, initiatives, milestones | No | Cloud-only / paid API surface. |
@@ -218,7 +218,7 @@ Edition mode.
 
 | Tool Name | Description |
 |-----------|-------------|
-| `list_work_items` | List all work items in a project with optional filtering and pagination |
+| `list_work_items` | List all work items in a project with pagination. In Community Edition mode, server-side PQL filtering is unavailable and is not exposed to agents. |
 | `create_work_item` | Create a new work item with name, assignees, labels, and other attributes |
 | `retrieve_work_item` | Retrieve a work item by ID with optional field expansion |
 | `retrieve_work_item_by_identifier` | Retrieve a work item by project identifier and issue sequence number |

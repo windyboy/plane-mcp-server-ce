@@ -67,100 +67,98 @@ def _retrieve_work_item_detail(
     )
 
 
-def register_work_item_tools(mcp: FastMCP) -> None:
+def _list_work_items(
+    project_id: str | None,
+    pql: str | None,
+    order_by: str | None,
+    per_page: int | None,
+    cursor: str | None,
+    expand: str | None,
+    fields: str | None,
+    external_id: str | None,
+    external_source: str | None,
+) -> dict[str, Any]:
+    """List work items, retaining Cloud PQL error handling when applicable."""
+    client, workspace_slug = get_plane_client_context()
+    params = WorkItemQueryParams(
+        pql=pql,
+        order_by=order_by,
+        per_page=per_page,
+        cursor=cursor,
+        expand=expand,
+        fields=fields,
+        external_id=external_id,
+        external_source=external_source,
+    )
+
+    try:
+        if project_id:
+            response: PaginatedWorkItemResponse = client.work_items.list(
+                workspace_slug=workspace_slug, project_id=project_id, params=params
+            )
+        else:
+            response = client.work_items.list_workspace(workspace_slug=workspace_slug, params=params)
+    except HttpError as e:
+        if pql and e.status_code == 400 and isinstance(e.response, dict) and "pql" in e.response:
+            logger.warning("list_work_items: invalid PQL %r → %s", pql, e.response)
+            return {
+                "error": e.response["pql"],
+                "failed_pql": pql,
+                "pql_reference": PQL_FULL_REFERENCE,
+                "hint": "The PQL above failed. Fix it using the reference and retry list_work_items.",
+            }
+        raise
+
+    return {
+        "results": [item.model_dump() if hasattr(item, "model_dump") else item for item in (response.results or [])],
+        "total_count": response.total_count,
+        "count": response.count,
+        "next_cursor": response.next_cursor,
+        "prev_cursor": response.prev_cursor,
+        "next_page_results": response.next_page_results,
+        "prev_page_results": response.prev_page_results,
+    }
+
+
+def register_work_item_tools(mcp: FastMCP, *, supports_pql: bool = True) -> None:
     """Register all work item-related tools with the MCP server."""
 
-    @mcp.tool()
-    def list_work_items(
-        project_id: str | None = None,
-        pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)] = None,
-        order_by: str | None = None,
-        per_page: int | None = None,
-        cursor: str | None = None,
-        expand: str | None = None,
-        fields: str | None = None,
-        external_id: str | None = None,
-        external_source: str | None = None,
-    ) -> dict[str, Any]:
-        """
-        List work items with optional PQL filtering.
+    if supports_pql:
 
-        Omit project_id to list across the entire workspace.
-        Pass project_id to scope results to a single project.
+        @mcp.tool()
+        def list_work_items(
+            project_id: str | None = None,
+            pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)] = None,
+            order_by: str | None = None,
+            per_page: int | None = None,
+            cursor: str | None = None,
+            expand: str | None = None,
+            fields: str | None = None,
+            external_id: str | None = None,
+            external_source: str | None = None,
+        ) -> dict[str, Any]:
+            """List work items with optional PQL filtering."""
+            return _list_work_items(
+                project_id, pql, order_by, per_page, cursor, expand, fields, external_id, external_source
+            )
 
-        For UUID fields (assignee, state, label, cycle, module, type,
-        milestone) call the relevant list tool first to get the UUID.
+    else:
 
-        Args:
-            project_id: UUID of the project. Omit for workspace-wide results.
-            pql: PQL filter. See field description for syntax.
-            order_by: Sort field; prefix `-` for descending (e.g. `-created_at`).
-            per_page: 1-100, default 25.
-            cursor: From previous response's next_cursor.
-            expand: Comma-separated relations to expand (e.g. assignees,labels,state).
-            fields: Sparse fieldset — id, name, sequence_id, priority, state,
-                project, assignees, labels, type_id, description_html, start_date,
-                target_date, created_at, updated_at, created_by, is_draft. Use
-                `project` (not `project_id`) and `description_html` (there is no
-                `description` field). Any field you omit or misname comes back
-                null — a null here does NOT mean the item lacks that value; it
-                means it was not requested. To read the description, include
-                description_html; for the type, include type_id.
-            external_id / external_source: Filter by external system.
-
-        Returns:
-            results: Paginated list of work items.
-            total_count: True DB total, not page-bounded — use for counts.
-            next_cursor: Cursor for the next page.
-            prev_cursor: Cursor for the previous page.
-        """
-        client, workspace_slug = get_plane_client_context()
-
-        params = WorkItemQueryParams(
-            pql=pql,
-            order_by=order_by,
-            per_page=per_page,
-            cursor=cursor,
-            expand=expand,
-            fields=fields,
-            external_id=external_id,
-            external_source=external_source,
-        )
-
-        try:
-            if project_id:
-                response: PaginatedWorkItemResponse = client.work_items.list(
-                    workspace_slug=workspace_slug,
-                    project_id=project_id,
-                    params=params,
-                )
-            else:
-                response = client.work_items.list_workspace(
-                    workspace_slug=workspace_slug,
-                    params=params,
-                )
-        except HttpError as e:
-            if pql and e.status_code == 400 and isinstance(e.response, dict) and "pql" in e.response:
-                logger.warning("list_work_items: invalid PQL %r → %s", pql, e.response)
-                return {
-                    "error": e.response["pql"],
-                    "failed_pql": pql,
-                    "pql_reference": PQL_FULL_REFERENCE,
-                    "hint": "The PQL above failed. Fix it using the reference and retry list_work_items.",
-                }
-            raise
-
-        return {
-            "results": [
-                item.model_dump() if hasattr(item, "model_dump") else item for item in (response.results or [])
-            ],
-            "total_count": response.total_count,
-            "count": response.count,
-            "next_cursor": response.next_cursor,
-            "prev_cursor": response.prev_cursor,
-            "next_page_results": response.next_page_results,
-            "prev_page_results": response.prev_page_results,
-        }
+        @mcp.tool()
+        def list_work_items(
+            project_id: str | None = None,
+            order_by: str | None = None,
+            per_page: int | None = None,
+            cursor: str | None = None,
+            expand: str | None = None,
+            fields: str | None = None,
+            external_id: str | None = None,
+            external_source: str | None = None,
+        ) -> dict[str, Any]:
+            """List CE work items with pagination; Plane CE does not support PQL filtering."""
+            return _list_work_items(
+                project_id, None, order_by, per_page, cursor, expand, fields, external_id, external_source
+            )
 
     @mcp.tool()
     def count_work_items(

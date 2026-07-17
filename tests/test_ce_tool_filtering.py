@@ -11,6 +11,11 @@ def _tool_names() -> set[str]:
     return {tool.name for tool in asyncio.run(mcp.list_tools())}
 
 
+def _tool(name: str):
+    mcp = get_stdio_mcp()
+    return next(tool for tool in asyncio.run(mcp.list_tools()) if tool.name == name)
+
+
 def test_community_mode_hides_unavailable_tools(monkeypatch):
     monkeypatch.setenv("PLANE_MCP_EDITION", "community")
 
@@ -38,3 +43,15 @@ def test_auto_mode_detects_a_self_hosted_url(monkeypatch):
     tool_names = _tool_names()
 
     assert not tool_names & CE_UNAVAILABLE_TOOLS
+
+
+def test_community_mode_does_not_advertise_unsupported_pql(monkeypatch):
+    monkeypatch.setenv("PLANE_MCP_EDITION", "community")
+
+    assert "pql" not in _tool("list_work_items").parameters["properties"]
+
+
+def test_cloud_mode_keeps_pql(monkeypatch):
+    monkeypatch.setenv("PLANE_MCP_EDITION", "cloud")
+
+    assert "pql" in _tool("list_work_items").parameters["properties"]

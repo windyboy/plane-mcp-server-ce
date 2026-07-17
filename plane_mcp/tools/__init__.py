@@ -117,8 +117,9 @@ def is_community_edition() -> bool:
 
 def register_tools(mcp: FastMCP) -> None:
     """Register all tools with the MCP server."""
+    ce_mode = is_community_edition()
     register_project_tools(mcp)
-    register_work_item_tools(mcp)
+    register_work_item_tools(mcp, supports_pql=not ce_mode)
     register_work_item_activity_tools(mcp)
     register_work_item_attachment_tools(mcp)
     register_work_item_comment_tools(mcp)
@@ -141,6 +142,6 @@ def register_tools(mcp: FastMCP) -> None:
     register_role_tools(mcp)
     register_pql_tools(mcp)
 
-    if is_community_edition():
+    if ce_mode:
         for tool_name in CE_UNAVAILABLE_TOOLS:
             mcp.local_provider.remove_tool(tool_name)

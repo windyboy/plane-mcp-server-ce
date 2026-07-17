@@ -50,7 +50,7 @@ Workspace : `members/`, `issues/search/` (alias `work-items/search/`),
 ### ✅ Fonctionnent tel quel (15)
 `get_me`, `get_pql_reference`, `search_work_items`, `retrieve_project`,
 `list_labels`, `retrieve_label`, `list_states`, `retrieve_state`,
-`list_work_items`, `retrieve_work_item`*, `list_intake_work_items`,
+`list_work_items`**, `retrieve_work_item`*, `list_intake_work_items`,
 `list_work_item_properties`†, `list_work_item_comments`,
 `list_work_item_links`, `list_work_item_attachments`.
 
@@ -58,6 +58,10 @@ Workspace : `members/`, `issues/search/` (alias `work-items/search/`),
 >    (sinon crash de validation, cf. BUG-2).
 > † `list_work_item_properties` renvoie OK — **à revérifier** (aucune route
 >    property côté CE ; possiblement réponse vide/silencieuse).
+> ** `list_work_items` fonctionne pour la liste, pagination et tri, mais la CE
+>    ignore silencieusement le paramètre `pql`. Le schéma MCP CE ne l'expose donc
+>    pas (contrairement au mode Cloud), afin que les agents ne tentent pas un
+>    filtrage serveur inexistant.
 
 ### 🔧 Category 1 — Corrigeables (CE a l'endpoint, mauvaise variante)
 | Outil MCP | Le SDK appelle | CE fournit (200) | Correctif |
