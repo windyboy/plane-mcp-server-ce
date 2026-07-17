@@ -1,5 +1,19 @@
 # Plane MCP Server
 
+> [!IMPORTANT]
+> ## Community Edition and self-hosted first
+>
+> This fork exists to provide the broadest possible MCP compatibility with the
+> free, self-hosted **Plane Community Edition**. It is not intended for upstream
+> contribution: its focus is making every capability that CE actually exposes
+> usable by AI agents, while keeping Cloud-only and paid features out of their
+> tool list.
+>
+> Issues and pull requests that improve Plane CE or self-hosted compatibility
+> are warmly welcome. Contributions authored with AI coding agents are welcome
+> too, provided they are clean, reviewed, and remain aligned with this CE and
+> self-hosted focus.
+
 A Model Context Protocol (MCP) server for Plane integration. This server provides tools and resources for interacting with Plane through AI agents.
 
 ## Features
@@ -30,7 +44,8 @@ The server supports three transport methods. **We recommend using `uvx`** as it 
       "env": {
         "PLANE_API_KEY": "<your-api-key>",
         "PLANE_WORKSPACE_SLUG": "<your-workspace-slug>",
-        "PLANE_BASE_URL": "https://api.plane.so"
+        "PLANE_BASE_URL": "https://<your-self-hosted-plane-url>",
+        "PLANE_MCP_EDITION": "community"
       }
     }
   }
@@ -119,12 +134,18 @@ The server requires authentication via environment variables:
 - `PLANE_API_KEY`: API key for authentication (required for stdio transport)
 - `PLANE_WORKSPACE_SLUG`: Workspace slug identifier (required for stdio transport)
 - `PLANE_ACCESS_TOKEN`: Access token for authentication (alternative to API key)
+- `PLANE_MCP_EDITION`: Tool discovery mode: `community` (or `ce`) exposes only
+  tools verified against Plane CE; `cloud` (or `all`) exposes the complete SDK
+  surface; `auto` is the default and treats a configured non-`*.plane.so` API
+  URL as self-hosted. Set `community` explicitly for predictable self-hosted
+  deployments, especially if you use a custom Cloud domain.
 
 **Example** (for stdio transport):
 ```bash
 export PLANE_BASE_URL="https://api.plane.so"
 export PLANE_API_KEY="your-api-key"
 export PLANE_WORKSPACE_SLUG="your-workspace-slug"
+export PLANE_MCP_EDITION="community"
 ```
 
 **Note**: For remote HTTP transports (OAuth or PAT), authentication is handled via the connection method (OAuth flow or PAT headers) and does not require these environment variables.
@@ -156,6 +177,27 @@ export LOG_USER_INFO="true"
 ## Available Tools
 
 The server provides comprehensive tools for interacting with Plane. All tools use Pydantic models from the Plane SDK for type safety and validation.
+
+### Community Edition availability
+
+Set `PLANE_MCP_EDITION=community` to prevent unavailable tools from being
+advertised to an agent. This keeps the MCP tool list focused on functionality
+that exists on the free, self-hosted edition instead of returning cryptic 404
+errors. The detailed endpoint evidence is maintained in [CE_COMPAT.md](CE_COMPAT.md).
+
+| Capability group | Available in CE mode | Notes |
+|---|---:|---|
+| Projects, members, cycles, modules, labels, states, intake items | Yes | CE-compatible endpoints, including the CE fallback for `*-lite` lists. |
+| Work items, search, activities, comments, links, attachments | Yes | Detail reads automatically expand assignees and labels. |
+| Work item relations | Partial | Listing and creating the eight built-in relation types work; CE stable exposes no deletion route. |
+| Work item property definitions and options | Partial | Definition tools remain exposed; per-item property values are not available. |
+| Feature flags, roles, initiatives, milestones | No | Cloud-only / paid API surface. |
+| Work logs, archived work items, estimates | No | Endpoints are absent from the tested CE API. |
+| Pages, work item types, custom relation definitions | No | Endpoints are absent from the tested CE API. |
+
+The category tables below describe the full SDK surface. Rows marked **No** or
+**Partial** above are deliberately omitted from MCP discovery in Community
+Edition mode.
 
 ### Projects
 
@@ -421,4 +463,3 @@ If you were using the previous Node.js-based `@makeplane/plane-mcp-server`, your
 ```
 
 **Please migrate to the new Python-based configuration shown in the Usage section above.**
-
