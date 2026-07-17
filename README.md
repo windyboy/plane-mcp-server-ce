@@ -1,4 +1,4 @@
-# Plane MCP Server
+# Plane MCP Server CE
 
 > [!IMPORTANT]
 > ## Community Edition and self-hosted first
@@ -14,7 +14,9 @@
 > too, provided they are clean, reviewed, and remain aligned with this CE and
 > self-hosted focus.
 
-A Model Context Protocol (MCP) server for Plane integration. This server provides tools and resources for interacting with Plane through AI agents.
+A Model Context Protocol (MCP) server for Plane integration. This package is
+published on PyPI as `plane-mcp-server-ce` and provides tools and resources for
+interacting with self-hosted Plane CE through AI agents.
 
 ## Features
 
@@ -40,7 +42,7 @@ The server supports three transport methods. **We recommend using `uvx`** as it 
   "mcpServers": {
     "plane": {
       "command": "uvx",
-      "args": ["plane-mcp-server", "stdio"],
+      "args": ["plane-mcp-server-ce", "stdio"],
       "env": {
         "PLANE_API_KEY": "<your-api-key>",
         "PLANE_WORKSPACE_SLUG": "<your-workspace-slug>",
@@ -463,3 +465,8 @@ If you were using the previous Node.js-based `@makeplane/plane-mcp-server`, your
 ```
 
 **Please migrate to the new Python-based configuration shown in the Usage section above.**
+
+## Releasing `plane-mcp-server-ce`
+
+Maintainers should follow [RELEASING.md](RELEASING.md). The first publication
+creates the PyPI project; never commit a PyPI token to this repository.

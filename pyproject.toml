@@ -1,13 +1,14 @@
 [project]
-name = "plane-mcp-server"
-version = "0.2.10"
-description = "A Model Context Protocol server for Plane integration"
+name = "plane-mcp-server-ce"
+version = "0.3.0"
+description = "Community Edition and self-hosted focused MCP server for Plane"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name= "Surya Prashanth", email = "surya.prashanth@plane.so"},
-    {name = "Plane Engineering", email = "support@plane.so"}
+    {name = "Plane Engineering", email = "support@plane.so"},
+    {name = "tancou", email = "commun@app.optimis.io"}
 ]
 keywords = ["mcp", "plane", "fastmcp", "ai", "automation"]
 
@@ -24,6 +25,11 @@ dependencies = [
     "fakeredis[lua]>=2.32.1,<2.35.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/tancou/plane-mcp-server-ce"
+Repository = "https://github.com/tancou/plane-mcp-server-ce"
+Issues = "https://github.com/tancou/plane-mcp-server-ce/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
@@ -31,7 +37,7 @@ dev = [
 ]
 
 [project.scripts]
-plane-mcp-server = "plane_mcp.__main__:main"
+plane-mcp-server-ce = "plane_mcp.__main__:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

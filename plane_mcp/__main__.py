@@ -128,6 +128,10 @@ async def combined_lifespan(oauth_app, header_app, sse_app):
 
 def main() -> None:
     """Run the MCP server."""
+    if len(sys.argv) > 1 and sys.argv[1] in {"-h", "--help"}:
+        print("Usage: plane-mcp-server-ce [stdio|http|sse]")
+        return
+
     server_mode = ServerMode.STDIO
     if len(sys.argv) > 1:
         server_mode = ServerMode(sys.argv[1])

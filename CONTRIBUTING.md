@@ -1,21 +1,21 @@
-# Contributing to Plane MCP Server
+# Contributing to Plane MCP Server CE
 
 Thank you for showing an interest in contributing to Plane MCP Server! All kinds of contributions are valuable to us. In this guide, we will cover how you can quickly onboard and make your first contribution.
 
 ## Submitting an issue
 
-Before submitting a new issue, please search the [issues](https://github.com/makeplane/plane-mcp-server/issues) tab. Maybe an issue or discussion already exists and might inform you of workarounds. Otherwise, you can give new information.
+Before submitting a new issue, please search the [issues](https://github.com/tancou/plane-mcp-server-ce/issues) tab. Maybe an issue or discussion already exists and might inform you of workarounds. Otherwise, you can give new information.
 
-While we want to fix all the [issues](https://github.com/makeplane/plane-mcp-server/issues), before fixing a bug we need to be able to reproduce and confirm it. Please provide us with a minimal reproduction scenario. Having a live, reproducible scenario gives us the information without asking questions back & forth with additional questions like:
+While we want to fix all the [issues](https://github.com/tancou/plane-mcp-server-ce/issues), before fixing a bug we need to be able to reproduce and confirm it. Please provide us with a minimal reproduction scenario. Having a live, reproducible scenario gives us the information without asking questions back & forth with additional questions like:
 
 - Python version and OS
 - MCP client being used (Claude Desktop, etc.)
 - Transport method (stdio, HTTP, SSE)
 - A use-case that fails
 
-Without said minimal reproduction, we won't be able to investigate all [issues](https://github.com/makeplane/plane-mcp-server/issues), and the issue might not be resolved.
+Without said minimal reproduction, we won't be able to investigate all [issues](https://github.com/tancou/plane-mcp-server-ce/issues), and the issue might not be resolved.
 
-You can open a new issue with this [issue form](https://github.com/makeplane/plane-mcp-server/issues/new).
+You can open a new issue with this [issue form](https://github.com/tancou/plane-mcp-server-ce/issues/new).
 
 ### Naming conventions for issues
 
@@ -48,8 +48,8 @@ This helps us triage and manage issues more efficiently.
 1. Clone the repo
 
 ```bash
-git clone https://github.com/makeplane/plane-mcp-server.git
-cd plane-mcp-server
+git clone https://github.com/tancou/plane-mcp-server-ce.git
+cd plane-mcp-server-ce
 ```
 
 2. Install dependencies
@@ -79,7 +79,7 @@ export $(cat .env.test.local | xargs) && pytest tests/ -v
 
 ## Missing a Feature?
 
-If a feature is missing, you can directly _request_ a new one [here](https://github.com/makeplane/plane-mcp-server/issues/new). If you would like to _implement_ it, an issue with your proposal must be submitted first, to be sure that we can use it. Please consider the guidelines given below.
+If a feature is missing, you can directly _request_ a new one [here](https://github.com/tancou/plane-mcp-server-ce/issues/new). If you would like to _implement_ it, an issue with your proposal must be submitted first, to be sure that we can use it. Please consider the guidelines given below.
 
 ## Coding guidelines
 
@@ -114,7 +114,7 @@ pytest
 ## Ways to contribute
 
 - Try the Plane MCP Server with different MCP clients and give feedback
-- Help with open [issues](https://github.com/makeplane/plane-mcp-server/issues) or [create your own](https://github.com/makeplane/plane-mcp-server/issues/new)
+- Help with open [issues](https://github.com/tancou/plane-mcp-server-ce/issues) or [create your own](https://github.com/tancou/plane-mcp-server-ce/issues/new)
 - Add new tools for Plane API endpoints
 - Improve existing tool documentation and descriptions
 - Report bugs
