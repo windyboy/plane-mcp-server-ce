@@ -193,7 +193,7 @@ errors. The detailed endpoint evidence is maintained in [CE_COMPAT.md](CE_COMPAT
 | Work item property definitions and options | Partial | Definition tools remain exposed; per-item property values are not available. |
 | Feature flags, roles, initiatives, milestones | No | Cloud-only / paid API surface. |
 | Work logs, archived work items, estimates | No | Endpoints are absent from the tested CE API. |
-| Pages, work item types, custom relation definitions | No | Endpoints are absent from the tested CE API. |
+| Pages, work item types, custom relation definitions | No | Pages exist in the CE UI, but only through legacy session-authenticated `/api/...` routes; PAT-based MCP access is unavailable. The other endpoints are absent. |
 
 The category tables below describe the full SDK surface. Rows marked **No** or
 **Partial** above are deliberately omitted from MCP discovery in Community

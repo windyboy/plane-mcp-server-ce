@@ -84,9 +84,16 @@ Workspace : `members/`, `issues/search/` (alias `work-items/search/`),
 `work_logs` (list/create/update/delete), `get_project_worklog_summary`
 (chemin `total-worklogs` absent — mais `summary/` existe, non wrappé),
 `list_archived_work_items` (route `archived-issues` absente),
-outils **pages** (non sous `/api/v1`, cf. issue #163 : essayer `/api/...`),
+outils **pages** (UI CE disponible sous `/api/...`, mais uniquement avec une
+session navigateur ; le PAT MCP reçoit `401`),
 outils **work-item-types** (`issue-types` absent de `/api/v1`),
 lecture/écriture **work-item property values**.
+
+Les Pages constituent une exception importante : la CE les enregistre bien sous
+`/api/workspaces/.../pages/`, et l'interface les utilise. Ces vues legacy
+requièrent toutefois `BaseSessionAuthentication` ; avec le même PAT que le MCP,
+elles répondent `401`. Elles restent donc indisponibles pour ce MCP fondé sur
+PAT, malgré leur disponibilité dans l'UI CE.
 
 > Pour Category 2 : au lieu d'un 404 brut, renvoyer une erreur claire
 > « non disponible sur Plane self-hosted / CE » (pattern décorateur, cf.
@@ -111,8 +118,9 @@ lecture/écriture **work-item property values**.
       et vérification que `plane-sdk` 0.2.19 accepte le `sequence_id` entier CE.
 - [ ] **P4 — Dégradation propre** pour Category 2 (décorateur
       « not-available-on-CE » façon PR #161, généralisé).
-- [ ] **P5 — Investiguer chemins alternatifs CE** : pages (`/api/...`),
-      work-item-types, estimates, worklogs. Confirmer présents/absents.
+- [ ] **P5 — Investiguer chemins alternatifs CE** : pages confirmées sous
+      `/api/...` mais non utilisables par PAT (session navigateur requise) ;
+      poursuivre sur work-item-types, estimates et worklogs.
 - [ ] **P6 — Emprunts upstream** (voir dossier ci-dessous) : `PLANE_MCP_MODULES`
       (PR #81, filtrage d'outils), `advanced_search` (PR #88), auto-expand
       assignees (PR #80), normalisation params JSON-string (PR #76),
