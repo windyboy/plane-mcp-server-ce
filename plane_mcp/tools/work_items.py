@@ -40,6 +40,33 @@ def _resolve_description_html(description_html: str | None, description_stripped
     return None
 
 
+def _expand_assignees_and_labels(expand: str | None) -> str:
+    """Ensure detail responses contain objects rather than CE's bare UUIDs."""
+    expansions = [value.strip() for value in (expand or "").split(",") if value.strip()]
+    for required in ("assignees", "labels"):
+        if required not in expansions:
+            expansions.append(required)
+    return ",".join(expansions)
+
+
+def _retrieve_work_item_detail(
+    client: Any,
+    workspace_slug: str,
+    project_id: str,
+    work_item_id: str,
+    params: RetrieveQueryParams | None = None,
+) -> WorkItemDetail:
+    """Retrieve an item with CE-compatible assignee and label expansions."""
+    request_params = params or RetrieveQueryParams()
+    request_params.expand = _expand_assignees_and_labels(request_params.expand)
+    return client.work_items.retrieve(
+        workspace_slug=workspace_slug,
+        project_id=project_id,
+        work_item_id=work_item_id,
+        params=request_params,
+    )
+
+
 def register_work_item_tools(mcp: FastMCP) -> None:
     """Register all work item-related tools with the MCP server."""
 
@@ -291,19 +318,14 @@ def register_work_item_tools(mcp: FastMCP) -> None:
         client, workspace_slug = get_plane_client_context()
 
         params = RetrieveQueryParams(
-            expand=expand,
+            expand=_expand_assignees_and_labels(expand),
             fields=fields,
             external_id=external_id,
             external_source=external_source,
             order_by=order_by,
         )
 
-        return client.work_items.retrieve(
-            workspace_slug=workspace_slug,
-            project_id=project_id,
-            work_item_id=work_item_id,
-            params=params,
-        )
+        return _retrieve_work_item_detail(client, workspace_slug, project_id, work_item_id, params)
 
     @mcp.tool()
     def retrieve_work_item_by_identifier(
@@ -351,7 +373,7 @@ def register_work_item_tools(mcp: FastMCP) -> None:
         client, workspace_slug = get_plane_client_context()
 
         params = RetrieveQueryParams(
-            expand=expand,
+            expand=_expand_assignees_and_labels(expand),
             fields=fields,
             external_id=external_id,
             external_source=external_source,
@@ -487,9 +509,7 @@ def register_work_item_tools(mcp: FastMCP) -> None:
             Updated WorkItem object
         """
         client, workspace_slug = get_plane_client_context()
-        current = client.work_items.retrieve(
-            workspace_slug=workspace_slug, project_id=project_id, work_item_id=work_item_id
-        )
+        current = _retrieve_work_item_detail(client, workspace_slug, project_id, work_item_id)
         ids = [u.id for u in (current.assignees or []) if u.id]
         if remove_user_id:
             ids = [uid for uid in ids if uid != remove_user_id]
@@ -526,9 +546,7 @@ def register_work_item_tools(mcp: FastMCP) -> None:
             Updated WorkItem object
         """
         client, workspace_slug = get_plane_client_context()
-        current = client.work_items.retrieve(
-            workspace_slug=workspace_slug, project_id=project_id, work_item_id=work_item_id
-        )
+        current = _retrieve_work_item_detail(client, workspace_slug, project_id, work_item_id)
         ids = [lb.id for lb in (current.labels or []) if lb.id]
         if remove_label_id:
             ids = [lid for lid in ids if lid != remove_label_id]

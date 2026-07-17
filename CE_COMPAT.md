@@ -72,9 +72,9 @@ Workspace : `members/`, `issues/search/` (alias `work-items/search/`),
 ### 🐛 Category 3 — Endpoint OK, modèle SDK cassé
 | Outil MCP | Bug | Correctif |
 |-----------|-----|-----------|
-| `list_work_item_activities` | `results.*.epoch` : API renvoie un float, modèle typé `int` | `epoch: int` → `float`/`int\|float` |
-| `retrieve_work_item` (avec assignees) | `assignees`/`labels` : UUID nus vs `UserLite`/`Label` | élargir le modèle **ou** `expand=assignees,labels` |
-| `search_work_items` | `sequence_id: str` alors que l'API renvoie un int (n'apparaît qu'avec des résultats réels) | `sequence_id: int\|str` |
+| `list_work_item_activities` | `results.*.epoch` : API renvoie un float, modèle SDK typé `int` | modèle MCP CE avec `epoch: float` |
+| `retrieve_work_item` (avec assignees) | `assignees`/`labels` : UUID nus vs `UserLite`/`Label` | ajoute systématiquement `expand=assignees,labels` |
+| `search_work_items` | `sequence_id: str` alors que l'API renvoie un int (n'apparaît qu'avec des résultats réels) | déjà corrigé dans le SDK 0.2.19 (`int`) ; vérifié avec résultat réel |
 
 ### 🚫 Category 2 — Absent de la CE `/api/v1` (dégrader proprement)
 `get_features`, `update_workspace_features`, `update_project_features`,
@@ -97,7 +97,7 @@ lecture/écriture **work-item property values**.
 
 ## Plan d'action (priorisé)
 
-- [ ] **P1 — Fallback lite→full** (`lite_or_fallback` helper). Corrige d'un
+- [x] **P1 — Fallback lite→full** (`lite_or_fallback` helper). Corrige d'un
       coup `list_projects`, `get_workspace_members`, `get_project_members`,
       `list_cycles`, `list_modules`. *Inspiré de la PR upstream #173, étendue
       aux 2 outils members.* Impact max / risque min.
@@ -106,9 +106,9 @@ lecture/écriture **work-item property values**.
       La CE stable testée n'enregistre aucune route de suppression (`GET`/`POST`
       uniquement) : `remove_work_item_relation` échoue donc explicitement au
       lieu d'appeler un endpoint 404.
-- [ ] **P3 — Bugs modèles** : `epoch` (activities), `assignees/labels`
-      (retrieve_work_item), `sequence_id` (search). Patch modèle SDK ou
-      normalisation côté outil.
+- [x] **P3 — Bugs modèles** : modèle MCP local pour `epoch` fractionnaire,
+      expansion automatique de `assignees,labels` lors des lectures détaillées,
+      et vérification que `plane-sdk` 0.2.19 accepte le `sequence_id` entier CE.
 - [ ] **P4 — Dégradation propre** pour Category 2 (décorateur
       « not-available-on-CE » façon PR #161, généralisé).
 - [ ] **P5 — Investiguer chemins alternatifs CE** : pages (`/api/...`),
