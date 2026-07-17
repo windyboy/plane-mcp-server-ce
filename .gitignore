@@ -56,3 +56,6 @@ dmypy.json
 
 # Ignore cursor AI rules
 .cursor/rules/codacy.mdc
+
+# Notes de test locales (identifiants)
+TESTING_LOCAL.md
