@@ -67,7 +67,7 @@ Workspace : `members/`, `issues/search/` (alias `work-items/search/`),
 | `get_project_members` | `project-members-lite` | `project-members/` | fallback lite→full |
 | `list_cycles` | `cycles` (lite) | `cycles/` | fallback lite→full |
 | `list_modules` | `modules` (lite) | `modules/` | fallback lite→full |
-| `list_work_item_relations` | `issues/{id}/issue-relation/` | `work-items/{id}/relations/` | changement de chemin |
+| `list_work_item_relations` | anciens endpoints relations SDK | `work-items/{id}/relations/` | client unifié CE |
 
 ### 🐛 Category 3 — Endpoint OK, modèle SDK cassé
 | Outil MCP | Bug | Correctif |
@@ -101,8 +101,11 @@ lecture/écriture **work-item property values**.
       coup `list_projects`, `get_workspace_members`, `get_project_members`,
       `list_cycles`, `list_modules`. *Inspiré de la PR upstream #173, étendue
       aux 2 outils members.* Impact max / risque min.
-- [ ] **P2 — Relations** : router `list_work_item_relations` (et create/remove)
-      vers `work-items/{id}/relations/`.
+- [x] **P2 — Relations** : `list_work_item_relations` et
+      `create_work_item_relation` utilisent `work-items/{id}/relations/`.
+      La CE stable testée n'enregistre aucune route de suppression (`GET`/`POST`
+      uniquement) : `remove_work_item_relation` échoue donc explicitement au
+      lieu d'appeler un endpoint 404.
 - [ ] **P3 — Bugs modèles** : `epoch` (activities), `assignees/labels`
       (retrieve_work_item), `sequence_id` (search). Patch modèle SDK ou
       normalisation côté outil.
