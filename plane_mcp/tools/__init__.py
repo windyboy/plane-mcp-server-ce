@@ -49,6 +49,7 @@ CE_UNAVAILABLE_TOOLS = frozenset(
         "delete_project_estimate_point",
         "count_work_items",
         "list_archived_work_items",
+        "manage_work_item_archive",
         "remove_work_item_relation",
         "list_work_item_relation_definitions",
         "create_work_item_relation_definition",

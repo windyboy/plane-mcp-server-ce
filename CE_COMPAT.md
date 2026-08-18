@@ -87,13 +87,26 @@ Workspace : `members/`, `issues/search/` (alias `work-items/search/`),
 `list_work_item_relation_definitions` (+ CRUD définitions),
 `work_logs` (list/create/update/delete), `get_project_worklog_summary`
 (chemin `total-worklogs` absent — mais `summary/` existe, non wrappé),
-`list_archived_work_items` (route `archived-issues` absente),
+`list_archived_work_items` + `manage_work_item_archive` (archive de work-item :
+absente de `/api/v1`, cf. note ci-dessous),
 outils **pages** (UI CE disponible sous `/api/...`, mais uniquement avec une
 session navigateur ; le PAT MCP reçoit `401`),
 outils **work-item-types** (`issue-types` absent de `/api/v1`),
 lecture/écriture **work-item property values**.
 
-Les Pages constituent une exception importante : la CE les enregistre bien sous
+**Archive de work-items** (`manage_work_item_archive`, `list_archived_work_items`) :
+même mur que les Pages. L'API publique `/api/v1/` **n'enregistre aucune route
+d'archive pour les work-items** — seuls `cycles`, `modules` et `projects` ont
+leur archive en v1 (donc `manage_cycle_archive`/`manage_module_archive`/
+`manage_project_archive` restent exposés et fonctionnels). La fonctionnalité
+existe côté CE mais uniquement sur l'API app (`/api/…/issues/{id}/archive/`,
+`archived-issues/`), en `BaseSessionAuthentication` → **`401` au PAT**. Le SDK
+(et l'outil officiel, même après le refacto dispatch #199) appelle
+`work-items/{id}/archive` → **`404` sur CE pour tout le monde**. `PATCH
+archived_at` en v1 renvoie 200 mais le champ est **read-only** (ignoré).
+Conclusion : **inatteignable en MCP PAT-only** ; les deux outils sont masqués.
+
+Les Pages constituent la même exception : la CE les enregistre bien sous
 `/api/workspaces/.../pages/`, et l'interface les utilise. Ces vues legacy
 requièrent toutefois `BaseSessionAuthentication` ; avec le même PAT que le MCP,
 elles répondent `401`. Elles restent donc indisponibles pour ce MCP fondé sur
