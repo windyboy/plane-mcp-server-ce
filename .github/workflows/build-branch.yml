@@ -93,7 +93,7 @@ jobs:
     steps:
       - id: checkout_files
         name: Checkout Files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Plane MCP Server Build and Push
         uses: makeplane/actions/build-push@v1.0.0
         with:
@@ -124,11 +124,11 @@ jobs:
       REL_VERSION: ${{ needs.release_build_setup.outputs.release_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v2.1.0
+        uses: softprops/action-gh-release@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
         with:
