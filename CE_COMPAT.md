@@ -80,42 +80,49 @@ Workspace : `members/`, `issues/search/` (alias `work-items/search/`),
 | `retrieve_work_item` (avec assignees) | `assignees`/`labels` : UUID nus vs `UserLite`/`Label` | ajoute systématiquement `expand=assignees,labels` |
 | `search_work_items` | `sequence_id: str` alors que l'API renvoie un int (n'apparaît qu'avec des résultats réels) | déjà corrigé dans le SDK 0.2.19 (`int`) ; vérifié avec résultat réel |
 
-### 🚫 Category 2 — Absent de la CE `/api/v1` (dégrader proprement)
+### 🚫 Category 2 — Absent de la CE (aucun endpoint, `/api/v1` ni app)
 `get_features`, `update_workspace_features`, `update_project_features`,
 `list_roles`/`retrieve_role`, `list_initiatives` (+ tous outils initiative),
 `list_milestones` (+ tous outils milestone), `count_work_items`,
 `list_work_item_relation_definitions` (+ CRUD définitions),
 `work_logs` (list/create/update/delete), `get_project_worklog_summary`
 (chemin `total-worklogs` absent — mais `summary/` existe, non wrappé),
-`list_archived_work_items` + `manage_work_item_archive` (archive de work-item :
-absente de `/api/v1`, cf. note ci-dessous),
-outils **pages** (UI CE disponible sous `/api/...`, mais uniquement avec une
-session navigateur ; le PAT MCP reçoit `401`),
 outils **work-item-types** (`issue-types` absent de `/api/v1`),
-lecture/écriture **work-item property values**.
+lecture/écriture **work-item property values**,
+liens **work-item ↔ page** (`attach_page_to_work_item`, `list_work_item_pages`,
+`detach_page_from_work_item` : aucune route CE, même app).
 
-**Archive de work-items** (`manage_work_item_archive`, `list_archived_work_items`) :
-même mur que les Pages. L'API publique `/api/v1/` **n'enregistre aucune route
-d'archive pour les work-items** — seuls `cycles`, `modules` et `projects` ont
-leur archive en v1 (donc `manage_cycle_archive`/`manage_module_archive`/
-`manage_project_archive` restent exposés et fonctionnels). La fonctionnalité
-existe côté CE mais uniquement sur l'API app (`/api/…/issues/{id}/archive/`,
-`archived-issues/`), en `BaseSessionAuthentication` → **`401` au PAT**. Le SDK
-(et l'outil officiel, même après le refacto dispatch #199) appelle
-`work-items/{id}/archive` → **`404` sur CE pour tout le monde**. `PATCH
-archived_at` en v1 renvoie 200 mais le champ est **read-only** (ignoré).
-Conclusion : **inatteignable en MCP PAT-only** ; les deux outils sont masqués.
+> Pour Category 2 : au lieu d'un 404 brut, masquer l'outil de la découverte MCP
+> (`CE_UNAVAILABLE_TOOLS`) — voir « two-tier hiding ». Réévaluer au cas par cas
+> si un chemin CE alternatif existe.
 
-Les Pages constituent la même exception : la CE les enregistre bien sous
-`/api/workspaces/.../pages/`, et l'interface les utilise. Ces vues legacy
-requièrent toutefois `BaseSessionAuthentication` ; avec le même PAT que le MCP,
-elles répondent `401`. Elles restent donc indisponibles pour ce MCP fondé sur
-PAT, malgré leur disponibilité dans l'UI CE.
+### 🔑 Category 4 — Session-only (API app, `BaseSessionAuthentication`)
+Existe sur la CE mais **uniquement via l'API app** (`/api/…`, sans `/v1`), qui
+utilise une session navigateur et **refuse le PAT avec `401`** :
 
-> Pour Category 2 : au lieu d'un 404 brut, renvoyer une erreur claire
-> « non disponible sur Plane self-hosted / CE » (pattern décorateur, cf.
-> upstream PR #161). Réévaluer au cas par cas si un chemin CE alternatif
-> existe (pages, work-item-types, estimates avec données).
+| Outil MCP | Endpoint app CE | Portée |
+|-----------|-----------------|--------|
+| `manage_work_item_archive` | `POST`/`DELETE` `…/issues/{id}/archive/` | archive/désarchive (états completed/cancelled) |
+| `list_archived_work_items` | `GET` `…/archived-issues/` | — |
+| `list_pages` / `retrieve_page` / `create_page` | `…/projects/{id}/pages/` | **projet uniquement** |
+
+L'API publique `/api/v1/` **n'enregistre aucune route d'archive de work-item** —
+seuls `cycles`, `modules`, `projects` ont leur archive en v1 (donc
+`manage_cycle_archive`/`manage_module_archive`/`manage_project_archive` restent
+exposés et fonctionnels). Le SDK (et l'outil officiel, même après le refacto
+dispatch #199) appelle `work-items/{id}/archive` → **`404` sur CE pour tout le
+monde**. `PATCH archived_at` en v1 renvoie 200 mais le champ est **read-only**.
+
+**Solution livrée (P7)** : `plane_mcp/app_session.py` — un pont opt-in qui se
+logue comme l'app (CSRF + `/auth/sign-in/`), réutilise le cookie `session-id`,
+et route **ces seuls outils** vers l'API app quand des identifiants de session
+sont configurés (`PLANE_SESSION_EMAIL`+`PLANE_SESSION_PASSWORD`, ou
+`PLANE_SESSION_COOKIE`). Sinon, ils restent masqués (two-tier hiding :
+`CE_SESSION_TOOLS`). Sur Cloud, ces variables sont ignorées (chemin SDK/PAT).
+
+Limites CE : pages **projet** seulement (pas de pages workspace, pas de liens
+work-item↔page — Category 2) ; `create_page` pose le titre + métadonnées, le
+corps (collaboratif) n'est pas défini via `description_html`.
 
 ---
 
@@ -133,11 +140,14 @@ PAT, malgré leur disponibilité dans l'UI CE.
 - [x] **P3 — Bugs modèles** : modèle MCP local pour `epoch` fractionnaire,
       expansion automatique de `assignees,labels` lors des lectures détaillées,
       et vérification que `plane-sdk` 0.2.19 accepte le `sequence_id` entier CE.
-- [ ] **P4 — Dégradation propre** pour Category 2 (décorateur
-      « not-available-on-CE » façon PR #161, généralisé).
-- [ ] **P5 — Investiguer chemins alternatifs CE** : pages confirmées sous
-      `/api/...` mais non utilisables par PAT (session navigateur requise) ;
-      poursuivre sur work-item-types, estimates et worklogs.
+- [x] **P4 — Masquage propre** pour Category 2 : `CE_UNAVAILABLE_TOOLS` retire
+      les outils sans équivalent CE de la découverte MCP (au lieu d'un 404 brut).
+- [x] **P7 — Pont session app** (`plane_mcp/app_session.py`) : débloque
+      `manage_work_item_archive`, `list_archived_work_items` et les pages projet
+      via l'API app quand des identifiants session sont fournis. Modèle
+      « two-tier hiding » : `CE_SESSION_TOOLS` masqués sauf si session configurée.
+      Cf. Category 4. (Le reste du P5 — work-item-types, estimates, worklogs —
+      reste ouvert : pas d'endpoint app exploitable identifié.)
 - [ ] **P6 — Emprunts upstream** (voir dossier ci-dessous) : `PLANE_MCP_MODULES`
       (PR #81, filtrage d'outils), `advanced_search` (PR #88), auto-expand
       assignees (PR #80), normalisation params JSON-string (PR #76),

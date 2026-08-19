@@ -141,6 +141,10 @@ The server requires authentication via environment variables:
   surface; `auto` is the default and treats a configured non-`*.plane.so` API
   URL as self-hosted. Set `community` explicitly for predictable self-hosted
   deployments, especially if you use a custom Cloud domain.
+- `PLANE_SESSION_EMAIL` / `PLANE_SESSION_PASSWORD`, or `PLANE_SESSION_COOKIE`:
+  Optional CE-only app-session credentials that unlock capabilities the public
+  API and a PAT cannot reach (work-item archive/unarchive and project pages).
+  See [Session-only capabilities](#session-only-capabilities-community-edition).
 
 **Example** (for stdio transport):
 ```bash
@@ -194,12 +198,45 @@ errors. The detailed endpoint evidence is maintained in [CE_COMPAT.md](CE_COMPAT
 | Work item relations | Partial | Listing and creating the eight built-in relation types work; CE stable exposes no deletion route. |
 | Work item property definitions and options | Partial | Definition tools remain exposed; per-item property values are not available. |
 | Feature flags, roles, initiatives, milestones | No | Cloud-only / paid API surface. |
-| Work logs, archived work items, estimates | No | Endpoints are absent from the tested CE API. |
-| Pages, work item types, custom relation definitions | No | Pages exist in the CE UI, but only through legacy session-authenticated `/api/...` routes; PAT-based MCP access is unavailable. The other endpoints are absent. |
+| Work logs, estimates | No | Endpoints are absent from the tested CE API. |
+| Work item archive/unarchive, archived work items | Session | Absent from the public API; reachable through the app API when app-session credentials are configured (see below). |
+| Project pages | Session | Absent from the public API; reachable through the app API when app-session credentials are configured. Workspace pages and work-item↔page links have no CE route. |
+| Work item types, custom relation definitions | No | Endpoints are absent from the tested CE API. |
 
 The category tables below describe the full SDK surface. Rows marked **No** or
 **Partial** above are deliberately omitted from MCP discovery in Community
-Edition mode.
+Edition mode. Rows marked **Session** are hidden by default and exposed only
+when app-session credentials are set.
+
+### Session-only capabilities (Community Edition)
+
+A few things exist on a self-hosted CE instance but are served only by the
+internal *app* API (`/api/…`, no `/v1`), which uses a browser session and
+rejects a personal access token with `401`: **work-item archive/unarchive**
+(and listing archived items) and **project pages**.
+
+Provide app-session credentials to unlock them. The MCP then logs in like the
+web app (CSRF + `/auth/sign-in/`), reuses the session cookie, and routes only
+these tools through the app API; everything else keeps using your PAT. On Plane
+Cloud these variables are ignored.
+
+```bash
+# either email + password …
+export PLANE_SESSION_EMAIL="you@example.com"
+export PLANE_SESSION_PASSWORD="your-password"
+# … or a pre-obtained session cookie (keeps the password out of the environment)
+export PLANE_SESSION_COOKIE="<session-id cookie value>"
+```
+
+Notes:
+- These credentials are your full user login (the app API is more privileged
+  than a scoped PAT). Prefer `PLANE_SESSION_COOKIE` where possible.
+- Only **project** pages are available; workspace-level pages and
+  work-item↔page links have no CE endpoint and stay hidden.
+- On CE, `create_page` sets the title and metadata; page body content is
+  collaborative and edited separately, so `description_html` is not applied.
+- Without these variables, the affected tools stay hidden in CE mode (no cryptic
+  404s). The endpoint evidence is in [CE_COMPAT.md](CE_COMPAT.md).
 
 ### Projects
 
