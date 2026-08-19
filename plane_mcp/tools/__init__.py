@@ -1,10 +1,8 @@
 """Tools for Plane MCP Server."""
 
-import os
-from urllib.parse import urlparse
-
 from fastmcp import FastMCP
 
+from plane_mcp.app_session import is_community_edition, session_auth_available
 from plane_mcp.tools.cycles import register_cycle_tools
 from plane_mcp.tools.initiatives import register_initiative_tools
 from plane_mcp.tools.intake import register_intake_tools
@@ -29,9 +27,10 @@ from plane_mcp.tools.work_items import register_work_item_tools
 from plane_mcp.tools.work_logs import register_work_log_tools
 from plane_mcp.tools.workspaces import register_workspace_tools
 
-# These endpoints are not registered by Plane Community Edition.  Keeping them
-# out of MCP discovery is more useful than exposing tools that can only return
-# a 404.  See CE_COMPAT.md for the endpoint-by-endpoint evidence.
+# These endpoints have no equivalent on Plane Community Edition (neither the
+# public /api/v1 API nor the internal app API).  Keeping them out of MCP
+# discovery is more useful than exposing tools that can only return a 404.
+# See CE_COMPAT.md for the endpoint-by-endpoint evidence.
 CE_UNAVAILABLE_TOOLS = frozenset(
     {
         "get_features",
@@ -48,8 +47,6 @@ CE_UNAVAILABLE_TOOLS = frozenset(
         "update_project_estimate_point",
         "delete_project_estimate_point",
         "count_work_items",
-        "list_archived_work_items",
-        "manage_work_item_archive",
         "remove_work_item_relation",
         "list_work_item_relation_definitions",
         "create_work_item_relation_definition",
@@ -94,26 +91,17 @@ CE_UNAVAILABLE_TOOLS = frozenset(
     }
 )
 
-
-def is_community_edition() -> bool:
-    """Whether MCP discovery should expose only CE-compatible tools.
-
-    ``PLANE_MCP_EDITION`` accepts ``community``/``ce`` to force CE mode and
-    ``cloud`` to expose the complete SDK surface.  Its default, ``auto``,
-    treats a configured non-``*.plane.so`` API host as self-hosted.  Explicit
-    configuration is recommended for custom Cloud domains.
-    """
-    edition = os.getenv("PLANE_MCP_EDITION", "auto").strip().lower()
-    if edition in {"community", "ce"}:
-        return True
-    if edition in {"cloud", "all"}:
-        return False
-    if edition != "auto":
-        raise ValueError("PLANE_MCP_EDITION must be one of: auto, community (or ce), cloud (or all).")
-
-    base_url = os.getenv("PLANE_INTERNAL_BASE_URL") or os.getenv("PLANE_BASE_URL", "")
-    hostname = urlparse(base_url).hostname or ""
-    return bool(hostname) and not hostname.endswith(".plane.so") and hostname != "plane.so"
+# These capabilities exist on CE but only via the internal *app* API, which needs
+# a browser session (BaseSessionAuthentication) and rejects a PAT with 401.  They
+# are hidden on CE by default, and exposed only when app-session credentials are
+# configured (PLANE_SESSION_EMAIL/PASSWORD or PLANE_SESSION_COOKIE), in which case
+# the tools route through plane_mcp.app_session.  See CE_COMPAT.md.
+CE_SESSION_TOOLS = frozenset(
+    {
+        "manage_work_item_archive",
+        "list_archived_work_items",
+    }
+)
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -144,5 +132,9 @@ def register_tools(mcp: FastMCP) -> None:
     register_pql_tools(mcp)
 
     if ce_mode:
-        for tool_name in CE_UNAVAILABLE_TOOLS:
+        hidden = set(CE_UNAVAILABLE_TOOLS)
+        # Session-only capabilities stay hidden unless app-session auth is set up.
+        if not session_auth_available():
+            hidden |= CE_SESSION_TOOLS
+        for tool_name in hidden:
             mcp.local_provider.remove_tool(tool_name)

@@ -19,6 +19,7 @@ from plane.models.work_items import (
 )
 from pydantic import Field
 
+from plane_mcp.app_session import get_app_session, route_via_app_session
 from plane_mcp.client import get_plane_client_context
 from plane_mcp.tools.pql_reference import PQL_FIELD_HINT, PQL_FULL_REFERENCE
 
@@ -584,6 +585,27 @@ def register_work_item_tools(mcp: FastMCP, *, supports_pql: bool = True) -> None
             Paginated envelope with results, total_count, next_cursor, prev_cursor.
         """
         client, workspace_slug = get_plane_client_context()
+
+        # CE serves archived work items only on the app API (archived-issues/),
+        # via a browser session. PQL/expand/fields are v1-only and don't apply
+        # there. See CE_COMPAT.md.
+        if route_via_app_session():
+            app = get_app_session()
+            query = {k: v for k, v in {"per_page": per_page, "cursor": cursor}.items() if v is not None}
+            data = app.get(
+                f"workspaces/{workspace_slug}/projects/{project_id}/archived-issues/",
+                params=query or None,
+            )
+            return {
+                "results": data.get("results", []),
+                "total_count": data.get("total_count"),
+                "count": data.get("count"),
+                "next_cursor": data.get("next_cursor"),
+                "prev_cursor": data.get("prev_cursor"),
+                "next_page_results": data.get("next_page_results"),
+                "prev_page_results": data.get("prev_page_results"),
+            }
+
         params = WorkItemQueryParams(
             pql=pql,
             order_by=order_by,
@@ -634,6 +656,15 @@ def register_work_item_tools(mcp: FastMCP, *, supports_pql: bool = True) -> None
             archive: True to archive the work item, False to unarchive it
         """
         client, workspace_slug = get_plane_client_context()
+
+        # CE has no work-item archive route on /api/v1; reach the app API with a
+        # session instead (POST to archive, DELETE to unarchive). See CE_COMPAT.md.
+        if route_via_app_session():
+            path = f"workspaces/{workspace_slug}/projects/{project_id}/issues/{work_item_id}/archive/"
+            app = get_app_session()
+            app.post(path, json={}) if archive else app.delete(path)
+            return
+
         if archive:
             client.work_items.archive(
                 workspace_slug=workspace_slug,

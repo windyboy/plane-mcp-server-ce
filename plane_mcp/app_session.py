@@ -31,12 +31,34 @@ from __future__ import annotations
 import os
 import threading
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from plane.errors.errors import ConfigurationError, HttpError
 
 # Unsafe HTTP methods that require a CSRF token on the Django app API.
 _UNSAFE = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def is_community_edition() -> bool:
+    """Whether MCP discovery should expose only CE-compatible tools.
+
+    ``PLANE_MCP_EDITION`` accepts ``community``/``ce`` to force CE mode and
+    ``cloud`` to expose the complete SDK surface.  Its default, ``auto``,
+    treats a configured non-``*.plane.so`` API host as self-hosted.  Explicit
+    configuration is recommended for custom Cloud domains.
+    """
+    edition = os.getenv("PLANE_MCP_EDITION", "auto").strip().lower()
+    if edition in {"community", "ce"}:
+        return True
+    if edition in {"cloud", "all"}:
+        return False
+    if edition != "auto":
+        raise ValueError("PLANE_MCP_EDITION must be one of: auto, community (or ce), cloud (or all).")
+
+    base_url = os.getenv("PLANE_INTERNAL_BASE_URL") or os.getenv("PLANE_BASE_URL", "")
+    hostname = urlparse(base_url).hostname or ""
+    return bool(hostname) and not hostname.endswith(".plane.so") and hostname != "plane.so"
 
 
 def session_auth_available() -> bool:
@@ -48,6 +70,15 @@ def session_auth_available() -> bool:
     if os.getenv("PLANE_SESSION_COOKIE", "").strip():
         return True
     return bool(os.getenv("PLANE_SESSION_EMAIL", "").strip() and os.getenv("PLANE_SESSION_PASSWORD", "").strip())
+
+
+def route_via_app_session() -> bool:
+    """Whether a session-capable tool should use the app API instead of the SDK.
+
+    True only on Community Edition *and* when app-session credentials are set.
+    On Cloud, these tools keep using the public ``/api/v1`` SDK path.
+    """
+    return is_community_edition() and session_auth_available()
 
 
 class AppSessionClient:
