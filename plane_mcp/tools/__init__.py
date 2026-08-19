@@ -72,12 +72,10 @@ CE_UNAVAILABLE_TOOLS = frozenset(
         "list_milestone_work_items",
         "list_roles",
         "retrieve_role",
-        "list_pages",
+        # Work-item<->page links do not exist on CE (no app route either).
         "attach_page_to_work_item",
         "list_work_item_pages",
         "detach_page_from_work_item",
-        "retrieve_page",
-        "create_page",
         "list_work_item_types",
         "create_work_item_type",
         "import_work_item_types_to_project",
@@ -100,6 +98,10 @@ CE_SESSION_TOOLS = frozenset(
     {
         "manage_work_item_archive",
         "list_archived_work_items",
+        # Project pages (workspace pages and work-item page links are Cloud-only).
+        "list_pages",
+        "retrieve_page",
+        "create_page",
     }
 )
 

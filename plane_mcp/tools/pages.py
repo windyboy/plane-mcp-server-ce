@@ -6,7 +6,12 @@ from fastmcp import FastMCP
 from plane.models.pages import CreatePage, Page
 from plane.models.work_item_pages import CreateWorkItemPage, WorkItemPage
 
+from plane_mcp.app_session import get_app_session, route_via_app_session
 from plane_mcp.client import get_plane_client_context
+
+# Community Edition serves pages only on the app API, in *project* scope. Workspace
+# pages and work-item<->page links do not exist on CE at all (see CE_COMPAT.md).
+_CE_WORKSPACE_PAGES = "Workspace-level pages are not available on Plane Community Edition; pass project_id."
 
 
 def register_page_tools(mcp: FastMCP) -> None:
@@ -30,6 +35,13 @@ def register_page_tools(mcp: FastMCP) -> None:
             List of Page objects
         """
         client, workspace_slug = get_plane_client_context()
+
+        if route_via_app_session():
+            if project_id is None:
+                raise ValueError(_CE_WORKSPACE_PAGES)
+            data = get_app_session().get(f"workspaces/{workspace_slug}/projects/{project_id}/pages/", params=params)
+            return [Page.model_validate(p) for p in (data or [])]
+
         if project_id is not None:
             response = client.pages.list_project_pages(
                 workspace_slug=workspace_slug, project_id=project_id, params=params
@@ -127,6 +139,12 @@ def register_page_tools(mcp: FastMCP) -> None:
         """
         client, workspace_slug = get_plane_client_context()
 
+        if route_via_app_session():
+            if project_id is None:
+                raise ValueError(_CE_WORKSPACE_PAGES)
+            data = get_app_session().get(f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/")
+            return Page.model_validate(data)
+
         if project_id is not None:
             return client.pages.retrieve_project_page(
                 workspace_slug=workspace_slug,
@@ -175,6 +193,25 @@ def register_page_tools(mcp: FastMCP) -> None:
             Created Page object
         """
         client, workspace_slug = get_plane_client_context()
+
+        if route_via_app_session():
+            if project_id is None:
+                raise ValueError(_CE_WORKSPACE_PAGES)
+            # The CE app page-create endpoint takes name + simple metadata; page
+            # content is edited separately (collaborative), so description_html is
+            # not applied here. See CE_COMPAT.md.
+            body: dict[str, Any] = {"name": name}
+            for key, value in {
+                "access": access,
+                "color": color,
+                "is_locked": is_locked,
+                "view_props": view_props,
+                "logo_props": logo_props,
+            }.items():
+                if value is not None:
+                    body[key] = value
+            created = get_app_session().post(f"workspaces/{workspace_slug}/projects/{project_id}/pages/", json=body)
+            return Page.model_validate(created)
 
         data = CreatePage(
             name=name,
