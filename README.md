@@ -31,11 +31,38 @@ is intentionally different from the executable: install
 
 The server supports three transport methods. **We recommend using `uvx`** as it doesn't require installation.
 
+### Install name vs. run command
+
+The PyPI distribution is `plane-community-mcp`, while the executable remains
+`plane-mcp-server-ce`. Use both names when starting it with `uvx`:
+
+```bash
+uvx --from plane-community-mcp plane-mcp-server-ce --help
+```
+
+Do not use `uvx plane-community-mcp`: that is the installable distribution, not
+the executable name. If you prefer a persistent installation instead:
+
+```bash
+python -m pip install plane-community-mcp
+plane-mcp-server-ce stdio
+```
+
 **Requirements**:
 - **Python 3.10+** (for stdio transport, via `uvx`)
 - **Node.js 22+** (for remote transports, via `npx`)
 
 ### 1. Stdio Transport (for local use)
+
+Set the credentials before launching the server directly:
+
+```bash
+export PLANE_BASE_URL="https://your-plane.example"
+export PLANE_API_KEY="your-api-key"
+export PLANE_WORKSPACE_SLUG="your-workspace"
+export PLANE_MCP_EDITION="community"
+uvx --from plane-community-mcp plane-mcp-server-ce stdio
+```
 
 **MCP Client Configuration** (using uvx - recommended):
 
