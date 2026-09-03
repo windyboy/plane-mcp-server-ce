@@ -893,8 +893,8 @@ wheels = [
 ]
 
 [[package]]
-name = "plane-mcp-server-ce"
-version = "0.4.0"
+name = "plane-community-mcp"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "authlib" },

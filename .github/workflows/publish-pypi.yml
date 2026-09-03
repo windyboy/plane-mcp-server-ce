@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   publish:
@@ -39,22 +39,3 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: python -m twine upload dist/*
-
-      - name: Get version from pyproject.toml
-        id: package-version
-        run: |
-          VERSION=$(grep "version = " pyproject.toml | cut -d'"' -f2 | head -1)
-          if [ -z "$VERSION" ]; then
-            echo "Error: Could not extract version from pyproject.toml"
-            exit 1
-          fi
-          echo "current-version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ steps.package-version.outputs.current-version }}
-          name: v${{ steps.package-version.outputs.current-version }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true

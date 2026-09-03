@@ -1,5 +1,5 @@
 [project]
-name = "plane-mcp-server-ce"
+name = "plane-community-mcp"
 version = "0.5.0"
 description = "Community Edition and self-hosted focused MCP server for Plane"
 readme = "README.md"
