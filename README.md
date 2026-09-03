@@ -20,6 +20,11 @@ interacting with self-hosted Plane CE through AI agents. The distribution name
 is intentionally different from the executable: install
 `plane-community-mcp`, then run `plane-mcp-server-ce`.
 
+This repository is a fork of `plane-mcp-server-ce`. It publishes under its own
+distribution name because the PyPI project `plane-mcp-server-ce` belongs to the
+upstream project; the GitHub repository and the CLI command keep the original
+name so existing agent configurations keep working.
+
 ## Features
 
 * 🏠 **CE-first**: hides API surfaces that self-hosted Community Edition cannot serve.
