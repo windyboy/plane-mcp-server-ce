@@ -521,5 +521,6 @@ If you were using the previous Node.js-based `@makeplane/plane-mcp-server`, your
 ## Releasing `plane-community-mcp`
 
 Maintainers should follow [RELEASING.md](RELEASING.md). The PyPI distribution
-is `plane-community-mcp`; the executable remains `plane-mcp-server-ce`. Never
-commit a PyPI token to this repository.
+is `plane-community-mcp`; the executable remains `plane-mcp-server-ce`.
+Publishing uses PyPI Trusted Publishing, so no PyPI token is stored in this
+repository.
