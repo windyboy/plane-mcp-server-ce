@@ -85,8 +85,9 @@ class AppSessionClient:
     """Minimal session-authenticated client for the CE app API.
 
     Login is lazy (performed on the first request, or the first unsafe request
-    when only a cookie is supplied). On a ``401``/``403`` the session is assumed
-    expired: the client re-authenticates once and retries the call.
+    when only a cookie is supplied). A GET that receives ``401`` re-authenticates
+    and retries once. Mutating requests are never replayed automatically: a lost
+    response may mean that Plane already applied the change.
     """
 
     def __init__(
@@ -175,21 +176,57 @@ class AppSessionClient:
         json: Any | None = None,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        """Call ``{origin}/api/{app_path}`` with session auth; retry once on 401/403.
+        """Call ``{origin}/api/{app_path}`` with conservative retry behavior.
 
         ``app_path`` is relative to the app API root, e.g.
         ``workspaces/{slug}/projects/{id}/issues/{id}/archive/``.
+
+        Only GET requests retry once, and only after a 401.  A 403 is surfaced
+        unchanged because it commonly represents an authorization or CSRF error.
+        POST, PUT, PATCH, and DELETE are never retried automatically; callers
+        must read the resource before deciding whether a retry is safe.
         """
         method = method.upper()
         needs_csrf = method in _UNSAFE
         self._ensure_authed(need_csrf=needs_csrf)
 
-        resp = self._send(method, app_path, json, params)
-        if resp.status_code in (401, 403):
-            # Session likely expired: re-authenticate once and retry.
+        try:
+            resp = self._send(method, app_path, json, params)
+        except requests.RequestException as exc:
+            if needs_csrf:
+                raise HttpError(
+                    "Write request may have reached Plane but received no response. "
+                    "Read the resource before retrying.",
+                    0,
+                    str(exc),
+                ) from exc
+            raise HttpError(f"Read request failed before reaching Plane: {exc}", 0, str(exc)) from exc
+
+        if needs_csrf and resp.status_code >= 400:
+            if resp.status_code < 500:
+                message = (
+                    f"HTTP {resp.status_code}: {resp.reason}. The write request was rejected and was not applied; "
+                    "correct the request before retrying."
+                )
+            else:
+                message = (
+                    f"HTTP {resp.status_code}: {resp.reason}. This write request was not retried; "
+                    "its outcome may be unknown. Read the resource before retrying."
+                )
+            raise HttpError(
+                message,
+                resp.status_code,
+                _payload(resp),
+            )
+
+        if method == "GET" and resp.status_code == 401:
+            # A read is safe to replay after re-authentication.
             self._authed = False
             self._ensure_authed(need_csrf=needs_csrf)
-            resp = self._send(method, app_path, json, params)
+            try:
+                resp = self._send(method, app_path, json, params)
+            except requests.RequestException as exc:
+                raise HttpError(f"Read request failed before reaching Plane: {exc}", 0, str(exc)) from exc
         return _handle(resp)
 
     def _send(self, method: str, app_path: str, json: Any | None, params: dict[str, Any] | None) -> requests.Response:
@@ -205,6 +242,9 @@ class AppSessionClient:
 
     def post(self, app_path: str, *, json: Any | None = None) -> Any:
         return self.request("POST", app_path, json=json)
+
+    def patch(self, app_path: str, *, json: Any | None = None) -> Any:
+        return self.request("PATCH", app_path, json=json)
 
     def delete(self, app_path: str, *, json: Any | None = None) -> Any:
         return self.request("DELETE", app_path, json=json)

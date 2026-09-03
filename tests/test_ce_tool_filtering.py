@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from plane_mcp.server import get_stdio_mcp
-from plane_mcp.tools import CE_SESSION_TOOLS, CE_UNAVAILABLE_TOOLS
+from plane_mcp.tools import CE_ONLY_TOOLS, CE_SESSION_TOOLS, CE_UNAVAILABLE_TOOLS
 
 
 @pytest.fixture(autouse=True)
@@ -52,6 +52,7 @@ def test_community_mode_exposes_session_tools_with_credentials(monkeypatch):
     tool_names = _tool_names()
 
     assert CE_SESSION_TOOLS <= tool_names
+    assert {"update_page", "update_page_content", "archive_page", "unarchive_page", "delete_page"} <= tool_names
     # Truly-unavailable tools stay hidden regardless of session auth.
     assert not tool_names & CE_UNAVAILABLE_TOOLS
 
@@ -62,7 +63,8 @@ def test_cloud_mode_keeps_full_tool_surface(monkeypatch):
     tool_names = _tool_names()
 
     assert CE_UNAVAILABLE_TOOLS <= tool_names
-    assert CE_SESSION_TOOLS <= tool_names
+    assert CE_SESSION_TOOLS - CE_ONLY_TOOLS <= tool_names
+    assert not tool_names & CE_ONLY_TOOLS
 
 
 def test_auto_mode_detects_a_self_hosted_url(monkeypatch):

@@ -20,10 +20,10 @@ interacting with self-hosted Plane CE through AI agents.
 
 ## Features
 
-* 🔧 **Plane Integration**: Interact with Plane APIs and services
-* 🔌 **Multiple Transports**: Supports stdio, SSE, and streamable HTTP transports
-* 🌐 **Remote & Local**: Works both locally and as a remote service
-* 🛠️ **Extensible**: Easy to add new tools and resources
+* 🏠 **CE-first**: hides API surfaces that self-hosted Community Edition cannot serve.
+* 🔐 **Two credential paths**: PAT/SDK for the public API; an opt-in browser session only for CE app-API gaps.
+* 📄 **Useful Pages support**: CE project pages support create, retrieve, rename, HTML content updates, archive, unarchive, and archived-page deletion.
+* 🔌 **Multiple transports**: stdio, SSE, and streamable HTTP.
 
 ## Usage
 
@@ -200,7 +200,7 @@ errors. The detailed endpoint evidence is maintained in [CE_COMPAT.md](CE_COMPAT
 | Feature flags, roles, initiatives, milestones | No | Cloud-only / paid API surface. |
 | Work logs, estimates | No | Endpoints are absent from the tested CE API. |
 | Work item archive/unarchive, archived work items | Session | Absent from the public API; reachable through the app API when app-session credentials are configured (see below). |
-| Project pages | Session | Absent from the public API; reachable through the app API when app-session credentials are configured. Workspace pages and work-item↔page links have no CE route. |
+| Project pages | Session | Root-project pages can create, retrieve, rename, update HTML, archive, unarchive, and delete archived pages through the app API. Workspace pages and work-item↔page links have no CE route. |
 | Work item types, custom relation definitions | No | Endpoints are absent from the tested CE API. |
 
 The category tables below describe the full SDK surface. Rows marked **No** or
@@ -228,13 +228,26 @@ export PLANE_SESSION_PASSWORD="your-password"
 export PLANE_SESSION_COOKIE="<session-id cookie value>"
 ```
 
+Pages available with a session are deliberately small and predictable:
+
+| Tool | CE behavior |
+|---|---|
+| `create_page` | Creates a project page, writes `description_html`, then reads it back. |
+| `update_page` / `update_page_content` | Rename a root-project page or replace its HTML content. |
+| `archive_page` / `unarchive_page` | Archive or restore a root-project page and return the read-back page. |
+| `delete_page` | Deletes an **already archived** project page. Archive first; CE rejects deletion of active pages. |
+
 Notes:
 - These credentials are your full user login (the app API is more privileged
   than a scoped PAT). Prefer `PLANE_SESSION_COOKIE` where possible.
 - Only **project** pages are available; workspace-level pages and
   work-item↔page links have no CE endpoint and stay hidden.
-- On CE, `create_page` sets the title and metadata; page body content is
-  collaborative and edited separately, so `description_html` is not applied.
+- Page writes are conservative: they are never automatically replayed. A 4xx
+  means the request was rejected; a 5xx or transport failure may be ambiguous,
+  so retrieve the page before retrying.
+- These four mutations are CE-only and intentionally do not appear in Cloud
+  discovery: `update_page`, `update_page_content`, `archive_page`, and
+  `unarchive_page`. Cloud retains `delete_page` through the SDK.
 - Without these variables, the affected tools stay hidden in CE mode (no cryptic
   404s). The endpoint evidence is in [CE_COMPAT.md](CE_COMPAT.md).
 

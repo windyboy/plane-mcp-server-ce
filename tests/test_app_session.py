@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 from plane.errors.errors import ConfigurationError, HttpError
 
 from plane_mcp import app_session
@@ -91,6 +92,55 @@ def test_401_triggers_single_relogin_and_retry():
     # two app calls total (initial + retry); login ran at least twice
     signins = [call for call in c._s.post.call_args_list if "/sign-in/" in call.args[0]]
     assert len(signins) >= 2
+
+
+def test_403_get_is_not_retried_or_reauthenticated():
+    c, _ = _client_with_fake_session()
+    c._s.request.return_value = _resp(status=403, json_body={"detail": "forbidden"})
+
+    with pytest.raises(HttpError) as ei:
+        c.get("workspaces/w/projects/p/pages/")
+
+    assert ei.value.status_code == 403
+    assert c._s.request.call_count == 1
+    signins = [call for call in c._s.post.call_args_list if "/sign-in/" in call.args[0]]
+    assert len(signins) == 1
+
+
+@pytest.mark.parametrize("status", [401, 403, 500])
+def test_write_response_is_never_replayed(status):
+    c, _ = _client_with_fake_session()
+    c._s.request.return_value = _resp(status=status, json_body={"detail": "failed"})
+
+    with pytest.raises(HttpError) as ei:
+        c.post("workspaces/w/projects/p/pages/p/archive/", json={})
+
+    assert ei.value.status_code == status
+    expected = "Read the resource before retrying" if status >= 500 else "correct the request before retrying"
+    assert expected in str(ei.value)
+    assert c._s.request.call_count == 1
+    signins = [call for call in c._s.post.call_args_list if "/sign-in/" in call.args[0]]
+    assert len(signins) == 1
+
+
+def test_write_transport_error_is_not_replayed():
+    c, _ = _client_with_fake_session()
+    c._s.request.side_effect = requests.Timeout("timed out")
+
+    with pytest.raises(HttpError) as ei:
+        c.post("workspaces/w/projects/p/pages/p/archive/", json={})
+
+    assert ei.value.status_code == 0
+    assert "may have reached Plane" in str(ei.value)
+    assert c._s.request.call_count == 1
+
+
+def test_read_transport_error_is_mapped():
+    c, _ = _client_with_fake_session()
+    c._s.request.side_effect = requests.Timeout("timed out")
+    with pytest.raises(HttpError, match="Read request failed") as ei:
+        c.get("workspaces/w/projects/p/pages/")
+    assert ei.value.status_code == 0
 
 
 def test_http_error_mapped():

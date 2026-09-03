@@ -105,6 +105,10 @@ utilise une session navigateur et **refuse le PAT avec `401`** :
 | `manage_work_item_archive` | `POST`/`DELETE` `…/issues/{id}/archive/` | archive/désarchive (états completed/cancelled) |
 | `list_archived_work_items` | `GET` `…/archived-issues/` | — |
 | `list_pages` / `retrieve_page` / `create_page` | `…/projects/{id}/pages/` | **projet uniquement** |
+| `update_page` | `PATCH …/projects/{id}/pages/{page_id}/` | projet uniquement ; `name` vérifié |
+| `update_page_content` | `PATCH …/projects/{id}/pages/{page_id}/description/` | projet uniquement ; `description_html` vérifié |
+| `archive_page` / `unarchive_page` | `POST` / `DELETE` `…/projects/{id}/pages/{page_id}/archive/` | projet uniquement |
+| `delete_page` | `DELETE …/projects/{id}/pages/{page_id}/` | la page doit déjà être archivée |
 
 L'API publique `/api/v1/` **n'enregistre aucune route d'archive de work-item** —
 seuls `cycles`, `modules`, `projects` ont leur archive en v1 (donc
@@ -121,8 +125,23 @@ sont configurés (`PLANE_SESSION_EMAIL`+`PLANE_SESSION_PASSWORD`, ou
 `CE_SESSION_TOOLS`). Sur Cloud, ces variables sont ignorées (chemin SDK/PAT).
 
 Limites CE : pages **projet** seulement (pas de pages workspace, pas de liens
-work-item↔page — Category 2) ; `create_page` pose le titre + métadonnées, le
-corps (collaboratif) n'est pas défini via `description_html`.
+work-item↔page — Category 2). L'endpoint de création pose le titre + métadonnées
+et le MCP applique ensuite `description_html` via `/description/`, afin que le
+résultat ne prétende jamais que le contenu a été sauvegardé quand il ne l'est pas.
+
+### Preuve Pages MVP — 2026-09-03
+
+Probe direct, sans retry, contre Plane CE **v1.4.1** à `https://plane.chans.xyz` (workspace `space`,
+projet PMCP) : list `200`, create `201`, retrieve `200`, PATCH nom `200`, PATCH
+description `200`, archive `200`, unarchive `204`, delete d'une page active
+`400` (« page should be archived »), puis archive + delete `204`. Le test MCP
+stdio exécute le même round-trip et nettoie sa page temporaire. La version CE
+n'est pas exposée par ces endpoints ; la vérifier avant toute montée de version.
+
+Pour les écritures session, le client ne rejoue jamais automatiquement une
+requête après un `401`, `403`, timeout, reset ou `5xx` : l'opération peut déjà
+avoir été appliquée. L'erreur conserve la réponse du serveur (notamment le
+texte d'un échec CSRF `403`) ; relire la ressource avant toute nouvelle tentative.
 
 ---
 

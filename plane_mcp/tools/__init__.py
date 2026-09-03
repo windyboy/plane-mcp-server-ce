@@ -102,8 +102,17 @@ CE_SESSION_TOOLS = frozenset(
         "list_pages",
         "retrieve_page",
         "create_page",
+        "update_page",
+        "update_page_content",
+        "archive_page",
+        "unarchive_page",
+        "delete_page",
     }
 )
+
+# These project-Page mutations have only been verified against the CE app API.
+# They must not appear on Cloud merely to raise NotImplementedError.
+CE_ONLY_TOOLS = frozenset({"update_page", "update_page_content", "archive_page", "unarchive_page"})
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -139,4 +148,7 @@ def register_tools(mcp: FastMCP) -> None:
         if not session_auth_available():
             hidden |= CE_SESSION_TOOLS
         for tool_name in hidden:
+            mcp.local_provider.remove_tool(tool_name)
+    else:
+        for tool_name in CE_ONLY_TOOLS:
             mcp.local_provider.remove_tool(tool_name)

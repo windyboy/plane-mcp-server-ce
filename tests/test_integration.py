@@ -8,9 +8,11 @@ Environment Variables Required:
 """
 
 import asyncio
+import json
 import os
 import uuid
 
+import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 
@@ -22,8 +24,8 @@ def get_config():
     mcp_url = os.getenv("PLANE_TEST_MCP_URL", "http://localhost:8211")
 
     if not api_key or not workspace_slug:
-        raise RuntimeError(
-            "Missing required env vars: PLANE_TEST_API_KEY, PLANE_TEST_WORKSPACE_SLUG"
+        pytest.skip(
+            "requires PLANE_TEST_API_KEY and PLANE_TEST_WORKSPACE_SLUG"
         )
 
     return {
@@ -38,13 +40,11 @@ def extract_result(result):
     if hasattr(result, "structured_content") and result.structured_content is not None:
         return result.structured_content
     if hasattr(result, "content") and result.content:
-        import json
-
         content = result.content[0]
         if hasattr(content, "text"):
             try:
                 return json.loads(content.text)
-            except:
+            except json.JSONDecodeError:
                 return {"raw": content.text}
     return {}
 

@@ -20,19 +20,19 @@ from fastmcp.exceptions import ToolError
 
 from plane_mcp.app_session import session_auth_available
 
-_REQUIRED = ("PLANE_TEST_API_KEY", "PLANE_TEST_WORKSPACE_SLUG", "PLANE_BASE_URL")
+_ARCHIVE_REQUIRED = ("PLANE_TEST_API_KEY", "PLANE_TEST_WORKSPACE_SLUG", "PLANE_BASE_URL")
+_PAGES_REQUIRED = ("PLANE_TEST_WORKSPACE_SLUG", "PLANE_BASE_URL", "PLANE_TEST_PROJECT_ID")
 
-pytestmark = pytest.mark.skipif(
-    not (session_auth_available() and all(os.getenv(v) for v in _REQUIRED)),
-    reason="requires a live CE stack + app-session credentials",
-)
+
+def _has_live_config(*variables: str) -> bool:
+    return session_auth_available() and all(os.getenv(variable) for variable in variables)
 
 
 @pytest.fixture
 def ce_env(monkeypatch):
     """Run the in-memory server in CE mode with PAT + session creds wired up."""
     monkeypatch.setenv("PLANE_MCP_EDITION", "community")
-    monkeypatch.setenv("PLANE_API_KEY", os.environ["PLANE_TEST_API_KEY"])
+    monkeypatch.setenv("PLANE_API_KEY", os.getenv("PLANE_TEST_API_KEY", "session-only"))
     monkeypatch.setenv("PLANE_WORKSPACE_SLUG", os.environ["PLANE_TEST_WORKSPACE_SLUG"])
     from plane_mcp import app_session
 
@@ -109,7 +109,7 @@ async def _pages_roundtrip():
         names = {t.name for t in await client.list_tools()}
         assert {"list_pages", "create_page", "retrieve_page"} <= names
 
-        project_id = _first_project_id(_val(await client.call_tool("list_projects", {})))
+        project_id = os.environ["PLANE_TEST_PROJECT_ID"]
         page = _val(
             await client.call_tool(
                 "create_page",
@@ -122,11 +122,32 @@ async def _pages_roundtrip():
         )
         page_id = _id(page)
         try:
+            assert _field(page, "description_html") == "<p>x</p>"
             pages = _rows(_val(await client.call_tool("list_pages", {"project_id": project_id})))
             assert page_id in [_id(p) for p in pages]
 
             fetched = _val(await client.call_tool("retrieve_page", {"page_id": page_id, "project_id": project_id}))
             assert _id(fetched) == page_id
+
+            updated = _val(
+                await client.call_tool(
+                    "update_page", {"page_id": page_id, "name": "itest-page-updated", "project_id": project_id}
+                )
+            )
+            assert _field(updated, "name") == "itest-page-updated"
+
+            content = _val(
+                await client.call_tool(
+                    "update_page_content",
+                    {"page_id": page_id, "description_html": "<p>updated</p>", "project_id": project_id},
+                )
+            )
+            assert _field(content, "description_html") == "<p>updated</p>"
+
+            archived = _val(await client.call_tool("archive_page", {"page_id": page_id, "project_id": project_id}))
+            assert _field(archived, "archived_at")
+            unarchived = _val(await client.call_tool("unarchive_page", {"page_id": page_id, "project_id": project_id}))
+            assert _field(unarchived, "archived_at") is None
 
             # Workspace-scope must fail cleanly on CE.
             with pytest.raises(ToolError, match="Workspace-level pages"):
@@ -135,12 +156,16 @@ async def _pages_roundtrip():
             ws = os.environ["PLANE_TEST_WORKSPACE_SLUG"]
             app = get_app_session()
             app.post(f"workspaces/{ws}/projects/{project_id}/pages/{page_id}/archive/", json={})
-            app.delete(f"workspaces/{ws}/projects/{project_id}/pages/{page_id}/")
+            await client.call_tool("delete_page", {"page_id": page_id, "project_id": project_id})
 
 
+@pytest.mark.skipif(not _has_live_config(*_ARCHIVE_REQUIRED), reason="requires live CE + PAT + session credentials")
 def test_ce_session_archive_roundtrip(ce_env):
     asyncio.run(_archive_roundtrip())
 
 
+@pytest.mark.skipif(
+    not _has_live_config(*_PAGES_REQUIRED), reason="requires live CE Pages configuration + session credentials"
+)
 def test_ce_session_pages_roundtrip(ce_env):
     asyncio.run(_pages_roundtrip())

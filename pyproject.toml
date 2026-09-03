@@ -1,6 +1,6 @@
 [project]
 name = "plane-mcp-server-ce"
-version = "0.4.0"
+version = "0.5.0"
 description = "Community Edition and self-hosted focused MCP server for Plane"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,9 +26,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/tancou/plane-mcp-server-ce"
-Repository = "https://github.com/tancou/plane-mcp-server-ce"
-Issues = "https://github.com/tancou/plane-mcp-server-ce/issues"
+Homepage = "https://github.com/windyboy/plane-mcp-server-ce"
+Repository = "https://github.com/windyboy/plane-mcp-server-ce"
+Issues = "https://github.com/windyboy/plane-mcp-server-ce/issues"
 
 [project.optional-dependencies]
 dev = [

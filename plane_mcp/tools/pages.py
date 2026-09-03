@@ -3,6 +3,7 @@
 from typing import Any
 
 from fastmcp import FastMCP
+from plane.errors.errors import HttpError
 from plane.models.pages import CreatePage, Page
 from plane.models.work_item_pages import CreateWorkItemPage, WorkItemPage
 
@@ -197,9 +198,8 @@ def register_page_tools(mcp: FastMCP) -> None:
         if route_via_app_session():
             if project_id is None:
                 raise ValueError(_CE_WORKSPACE_PAGES)
-            # The CE app page-create endpoint takes name + simple metadata; page
-            # content is edited separately (collaborative), so description_html is
-            # not applied here. See CE_COMPAT.md.
+            # The CE app page-create endpoint takes name + simple metadata;
+            # collaborative content is applied on its separate endpoint below.
             body: dict[str, Any] = {"name": name}
             for key, value in {
                 "access": access,
@@ -210,8 +210,23 @@ def register_page_tools(mcp: FastMCP) -> None:
             }.items():
                 if value is not None:
                     body[key] = value
-            created = get_app_session().post(f"workspaces/{workspace_slug}/projects/{project_id}/pages/", json=body)
-            return Page.model_validate(created)
+            app = get_app_session()
+            base = f"workspaces/{workspace_slug}/projects/{project_id}/pages/"
+            created = app.post(base, json=body)
+            page_id = created["id"]
+            if description_html:
+                # CE stores collaborative content on a separate, proven route.
+                # Do this explicitly so the tool never claims content was saved
+                # when the create endpoint accepted only the page metadata.
+                try:
+                    app.patch(f"{base}{page_id}/description/", json={"description_html": description_html})
+                except HttpError as exc:
+                    raise HttpError(
+                        f"Page {page_id} was created but its content update failed; use update_page_content to retry.",
+                        exc.status_code,
+                        exc.response,
+                    ) from exc
+            return Page.model_validate(app.get(f"{base}{page_id}/"))
 
         data = CreatePage(
             name=name,
@@ -236,3 +251,68 @@ def register_page_tools(mcp: FastMCP) -> None:
             workspace_slug=workspace_slug,
             data=data,
         )
+
+    @mcp.tool()
+    def update_page(
+        page_id: str,
+        name: str,
+        project_id: str,
+    ) -> Page:
+        """Rename a project-root page through the CE app-session API.
+
+        This operation is exposed in CE only when session credentials are
+        configured. Cloud update support awaits a public SDK method.
+        """
+        if not route_via_app_session():
+            raise NotImplementedError("update_page currently requires Plane CE app-session credentials.")
+        _, workspace_slug = get_plane_client_context()
+        path = f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/"
+        get_app_session().patch(path, json={"name": name})
+        return Page.model_validate(get_app_session().get(path))
+
+    @mcp.tool()
+    def update_page_content(
+        page_id: str,
+        description_html: str,
+        project_id: str,
+    ) -> Page:
+        """Update a project-root page's HTML content through the CE app API."""
+        if not route_via_app_session():
+            raise NotImplementedError("update_page_content currently requires Plane CE app-session credentials.")
+        _, workspace_slug = get_plane_client_context()
+        base = f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/"
+        get_app_session().patch(f"{base}description/", json={"description_html": description_html})
+        return Page.model_validate(get_app_session().get(base))
+
+    @mcp.tool()
+    def archive_page(page_id: str, project_id: str) -> Page:
+        """Archive a project-root page through the CE app-session API."""
+        if not route_via_app_session():
+            raise NotImplementedError("archive_page currently requires Plane CE app-session credentials.")
+        _, workspace_slug = get_plane_client_context()
+        base = f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/"
+        get_app_session().post(f"{base}archive/", json={})
+        return Page.model_validate(get_app_session().get(base))
+
+    @mcp.tool()
+    def unarchive_page(page_id: str, project_id: str) -> Page:
+        """Unarchive a project-root page through the CE app-session API."""
+        if not route_via_app_session():
+            raise NotImplementedError("unarchive_page currently requires Plane CE app-session credentials.")
+        _, workspace_slug = get_plane_client_context()
+        base = f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/"
+        get_app_session().delete(f"{base}archive/")
+        return Page.model_validate(get_app_session().get(base))
+
+    @mcp.tool()
+    def delete_page(page_id: str, project_id: str) -> None:
+        """Delete an archived project-root page through the CE app-session API.
+
+        Plane CE rejects deletion of an active page; call ``archive_page`` and
+        read it back before deleting.
+        """
+        client, workspace_slug = get_plane_client_context()
+        if route_via_app_session():
+            get_app_session().delete(f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/")
+            return
+        client.pages.delete_project_page(workspace_slug=workspace_slug, project_id=project_id, page_id=page_id)
