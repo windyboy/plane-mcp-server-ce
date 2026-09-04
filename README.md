@@ -57,17 +57,29 @@ plane-mcp-server-ce stdio
 - **Python 3.10+** (for stdio transport, via `uvx`)
 - **Node.js 22+** (for remote transports, via `npx`)
 
-### 1. Stdio Transport (for local use)
+### 1. Stdio transport against self-hosted Plane CE (recommended)
 
-Set the credentials before launching the server directly:
+This is the standard setup for a self-hosted Community Edition instance. Set
+the environment variables before launching the server:
 
 ```bash
-export PLANE_BASE_URL="https://your-plane.example"
-export PLANE_API_KEY="your-api-key"
+export PLANE_BASE_URL="https://your-plane.example"   # your CE instance origin
+export PLANE_API_KEY="your-api-key"                  # created in CE workspace settings → API
 export PLANE_WORKSPACE_SLUG="your-workspace"
 export PLANE_MCP_EDITION="community"
+
+# Optional — unlocks project pages and work-item archive/unarchive on CE:
+# export PLANE_SESSION_COOKIE="<session-id cookie value>"
+# … or email + password instead of a cookie:
+# export PLANE_SESSION_EMAIL="you@example.com"
+# export PLANE_SESSION_PASSWORD="your-password"
+
 uvx --from plane-community-mcp plane-mcp-server-ce stdio
 ```
+
+The `PLANE_SESSION_*` variables are optional: without them the server works
+normally, but the pages and archive tools stay hidden. See
+[Session-only capabilities](#session-only-capabilities-community-edition).
 
 **MCP Client Configuration** (using uvx - recommended):
 
@@ -88,13 +100,84 @@ uvx --from plane-community-mcp plane-mcp-server-ce stdio
 }
 ```
 
-### 2. Remote HTTP Transport with OAuth
+Need project pages or work-item archiving? Add `PLANE_SESSION_COOKIE` (or
+`PLANE_SESSION_EMAIL` + `PLANE_SESSION_PASSWORD`) to the same `env` block.
 
-Connect to the hosted Plane MCP server using OAuth authentication.
+### 2. Self-hosted HTTP transports
 
-**URL**: `https://mcp.plane.so/http/mcp`
+Run the server on your own network when several clients need to reach it over
+HTTP, or when your client only speaks URL-based transports. The server listens
+on port **8211** and mounts three endpoints:
 
-**MCP Client Configuration** (for tools like Claude Desktop without native remote MCP support):
+| Endpoint | Transport | Authentication |
+|---|---|---|
+| `/http/api-key/mcp` | Streamable HTTP | PAT headers (`x-api-key` + `x-workspace-slug`) |
+| `/http/mcp` | Streamable HTTP | OAuth |
+| `/sse` | SSE (legacy) | OAuth |
+
+#### PAT (header) mode — the simple option for CE
+
+The server only needs to know where your Plane instance lives; each client
+authenticates with its own API key:
+
+```bash
+export PLANE_BASE_URL="https://your-plane.example"
+export PLANE_MCP_EDITION="community"
+uvx --from plane-community-mcp plane-mcp-server-ce http
+```
+
+Or with Docker (the image defaults to the `http` transport):
+
+```bash
+docker build -t plane-mcp-server-ce .
+docker run -p 8211:8211 \
+  -e PLANE_BASE_URL="https://your-plane.example" \
+  -e PLANE_MCP_EDITION="community" \
+  plane-mcp-server-ce
+```
+
+Client configuration (`mcp-remote` forwards the headers; `${VAR}` is expanded
+from the client's environment):
+
+```json
+{
+  "mcpServers": {
+    "plane": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "http://your-server:8211/http/api-key/mcp",
+        "--header", "x-api-key:${PLANE_API_KEY}",
+        "--header", "x-workspace-slug:${PLANE_WORKSPACE_SLUG}"
+      ]
+    }
+  }
+}
+```
+
+#### OAuth mode
+
+OAuth requires a Plane OAuth client. Set `PLANE_OAUTH_PROVIDER_CLIENT_ID`,
+`PLANE_OAUTH_PROVIDER_CLIENT_SECRET`, and `PLANE_OAUTH_PROVIDER_BASE_URL` (the
+public base URL of this MCP server, e.g. `https://mcp.example.com`) before
+starting the `http` transport, then point clients at `http://your-server:8211/http/mcp`.
+OAuth tokens are kept in memory by default and are lost on restart; set
+`REDIS_HOST` / `REDIS_PORT` (and `REDIS_PASSWORD` if required) to persist them.
+
+#### SSE (legacy)
+
+The legacy SSE endpoint is served at `http://your-server:8211/sse` with the
+same OAuth setup as above. Prefer the HTTP endpoints for new clients.
+
+### 3. Plane Cloud hosted server (official)
+
+The sections above cover self-hosted Community Edition. Plane also operates a
+hosted MCP server at `mcp.plane.so` for Plane Cloud workspaces — those
+endpoints belong to the official service, not to this fork, and none of the
+CE-specific behavior applies when connecting to them. Configuration for
+clients without native remote MCP support:
+
+**OAuth**: `https://mcp.plane.so/http/mcp`
 
 ```json
 {
@@ -107,44 +190,25 @@ Connect to the hosted Plane MCP server using OAuth authentication.
 }
 ```
 
-**Note**: OAuth authentication will be handled automatically when connecting to the remote server.
-
-### 3. Remote HTTP Transport using PAT Token
-
-Connect to the hosted Plane MCP server using a Personal Access Token (PAT).
-
-**URL**: `https://mcp.plane.so/http/api-key/mcp`
-
-**Headers**:
-- `Authorization: Bearer <PAT_TOKEN>`
-- `X-Workspace-slug: <SLUG>`
-
-**MCP Client Configuration** (for tools like Claude Desktop without native remote MCP support):
+**PAT headers**: `https://mcp.plane.so/http/api-key/mcp`
 
 ```json
 {
   "mcpServers": {
     "plane": {
       "command": "npx",
-      "args": ["mcp-remote@latest", "https://mcp.plane.so/http/api-key/mcp"],
-      "headers": {
-        "Authorization": "Bearer <PAT_TOKEN>",
-        "X-Workspace-slug": "<SLUG>"
-      }
+      "args": [
+        "mcp-remote@latest",
+        "https://mcp.plane.so/http/api-key/mcp",
+        "--header", "Authorization: Bearer ${PLANE_PAT_TOKEN}",
+        "--header", "X-Workspace-slug: ${PLANE_WORKSPACE_SLUG}"
+      ]
     }
   }
 }
 ```
 
-### 4. SSE Transport (Legacy)
-
-⚠️ **Legacy Transport**: SSE (Server-Sent Events) transport is maintained for backward compatibility. New implementations should use the HTTP transport (sections 2 or 3) instead.
-
-Connect to the hosted Plane MCP server using OAuth authentication via Server-Sent Events.
-
-**URL**: `https://mcp.plane.so/sse`
-
-**MCP Client Configuration** (for tools that support SSE transport):
+**SSE (legacy)**: `https://mcp.plane.so/sse`
 
 ```json
 {
@@ -157,7 +221,8 @@ Connect to the hosted Plane MCP server using OAuth authentication via Server-Sen
 }
 ```
 
-**Note**: OAuth authentication will be handled automatically when connecting to the remote server. This transport is deprecated in favor of the HTTP transport.
+OAuth authentication is handled automatically when connecting to the hosted
+server.
 
 
 ## Configuration
@@ -166,10 +231,10 @@ Connect to the hosted Plane MCP server using OAuth authentication via Server-Sen
 
 The server requires authentication via environment variables:
 
-- `PLANE_BASE_URL`: Base URL for Plane API (default: `https://api.plane.so`) - Optional
+- `PLANE_BASE_URL`: Base URL for Plane API (default: `https://api.plane.so`). For self-hosted CE, set this to your instance origin, e.g. `https://your-plane.example`.
 - `PLANE_API_KEY`: API key for authentication (required for stdio transport)
 - `PLANE_WORKSPACE_SLUG`: Workspace slug identifier (required for stdio transport)
-- `PLANE_ACCESS_TOKEN`: Access token for authentication (alternative to API key)
+- `PLANE_INTERNAL_BASE_URL`: Internal URL preferred over `PLANE_BASE_URL` for server-to-server calls (useful when the MCP server runs inside the same network as Plane). Also consulted by `PLANE_MCP_EDITION=auto` when detecting a self-hosted instance.
 - `PLANE_MCP_EDITION`: Tool discovery mode: `community` (or `ce`) exposes only
   tools verified against Plane CE; `cloud` (or `all`) exposes the complete SDK
   surface; `auto` is the default and treats a configured non-`*.plane.so` API
@@ -180,15 +245,15 @@ The server requires authentication via environment variables:
   API and a PAT cannot reach (work-item archive/unarchive and project pages).
   See [Session-only capabilities](#session-only-capabilities-community-edition).
 
-**Example** (for stdio transport):
+**Example** (self-hosted CE, stdio transport):
 ```bash
-export PLANE_BASE_URL="https://api.plane.so"
+export PLANE_BASE_URL="https://your-plane.example"
 export PLANE_API_KEY="your-api-key"
 export PLANE_WORKSPACE_SLUG="your-workspace-slug"
 export PLANE_MCP_EDITION="community"
 ```
 
-**Note**: For remote HTTP transports (OAuth or PAT), authentication is handled via the connection method (OAuth flow or PAT headers) and does not require these environment variables.
+**Note**: For the self-hosted HTTP transports (section 2), set `PLANE_BASE_URL` (and `PLANE_MCP_EDITION`) on the *server*; each client then authenticates via OAuth or PAT headers. For the hosted Plane Cloud server (section 3), authentication is handled by the connection method (OAuth flow or PAT headers) and needs none of these environment variables.
 
 ### OAuth redirect URIs
 
