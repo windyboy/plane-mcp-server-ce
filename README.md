@@ -28,7 +28,7 @@ name so existing agent configurations keep working.
 ## Features
 
 * 🏠 **CE-first**: hides API surfaces that self-hosted Community Edition cannot serve.
-* 🔐 **Two credential paths**: PAT/SDK for the public API; an opt-in browser session only for CE app-API gaps.
+* 🔐 **Two credential paths**: PAT/SDK for the public API; a browser session for the CE app-API features (pages, archive).
 * 📄 **Useful Pages support**: CE project pages support create, retrieve, rename, HTML content updates, archive, unarchive, and archived-page deletion.
 * 🔌 **Multiple transports**: stdio, SSE, and streamable HTTP.
 
@@ -68,8 +68,10 @@ export PLANE_API_KEY="your-api-key"                  # created in CE workspace s
 export PLANE_WORKSPACE_SLUG="your-workspace"
 export PLANE_MCP_EDITION="community"
 
-# Optional — unlocks project pages and work-item archive/unarchive on CE:
-# export PLANE_SESSION_COOKIE="<session-id cookie value>"
+# Session credentials — required for the CE-only tools this fork exists for
+# (project pages, work-item archive/unarchive). Everything else works with
+# the API key alone; without these, pages and archive tools stay hidden.
+# export PLANE_SESSION_COOKIE="<session-id cookie value>"   # preferred
 # … or email + password instead of a cookie:
 # export PLANE_SESSION_EMAIL="you@example.com"
 # export PLANE_SESSION_PASSWORD="your-password"
@@ -77,9 +79,11 @@ export PLANE_MCP_EDITION="community"
 uvx --from plane-community-mcp plane-mcp-server-ce stdio
 ```
 
-The `PLANE_SESSION_*` variables are optional: without them the server works
-normally, but the pages and archive tools stay hidden. See
-[Session-only capabilities](#session-only-capabilities-community-edition).
+Project pages and work-item archiving are the reason to run this fork instead
+of upstream — and they **require** session credentials: without `PLANE_SESSION_*`
+those tools stay hidden, while the rest of the server works with the API key
+alone. See [Session-only capabilities](#session-only-capabilities-community-edition)
+for how to obtain the cookie.
 
 **MCP Client Configuration** (using uvx - recommended):
 
@@ -93,15 +97,17 @@ normally, but the pages and archive tools stay hidden. See
         "PLANE_API_KEY": "<your-api-key>",
         "PLANE_WORKSPACE_SLUG": "<your-workspace-slug>",
         "PLANE_BASE_URL": "https://<your-self-hosted-plane-url>",
-        "PLANE_MCP_EDITION": "community"
+        "PLANE_MCP_EDITION": "community",
+        "PLANE_SESSION_COOKIE": "<your-session-id-cookie>"
       }
     }
   }
 }
 ```
 
-Need project pages or work-item archiving? Add `PLANE_SESSION_COOKIE` (or
-`PLANE_SESSION_EMAIL` + `PLANE_SESSION_PASSWORD`) to the same `env` block.
+The `PLANE_SESSION_COOKIE` entry (or `PLANE_SESSION_EMAIL` +
+`PLANE_SESSION_PASSWORD`) is what turns on the pages and archive tools —
+the CE features this fork exists for. Omit it and those tools stay hidden.
 
 ### 2. Self-hosted HTTP transports
 
@@ -241,9 +247,10 @@ The server requires authentication via environment variables:
   URL as self-hosted. Set `community` explicitly for predictable self-hosted
   deployments, especially if you use a custom Cloud domain.
 - `PLANE_SESSION_EMAIL` / `PLANE_SESSION_PASSWORD`, or `PLANE_SESSION_COOKIE`:
-  Optional CE-only app-session credentials that unlock capabilities the public
-  API and a PAT cannot reach (work-item archive/unarchive and project pages).
-  See [Session-only capabilities](#session-only-capabilities-community-edition).
+  CE-only app-session credentials — required for the tools this fork exists
+  for (work-item archive/unarchive and project pages); without them those
+  tools are hidden from discovery. See
+  [Session-only capabilities](#session-only-capabilities-community-edition).
 
 **Example** (self-hosted CE, stdio transport):
 ```bash
@@ -326,6 +333,12 @@ export PLANE_SESSION_PASSWORD="your-password"
 # … or a pre-obtained session cookie (keeps the password out of the environment)
 export PLANE_SESSION_COOKIE="<session-id cookie value>"
 ```
+
+To get the cookie: log into your CE instance in the browser, then copy the
+`session-id` value from DevTools → Application → Cookies. It expires when you
+log out or the session is invalidated — when the pages and archive tools start
+returning `401`, copy a fresh one. Email + password avoids expiry but places
+your full account credentials in the environment; prefer the cookie.
 
 Pages available with a session are deliberately small and predictable:
 
