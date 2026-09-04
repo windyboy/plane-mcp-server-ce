@@ -65,6 +65,16 @@ def test_cloud_mode_keeps_full_tool_surface(monkeypatch):
     assert CE_UNAVAILABLE_TOOLS <= tool_names
     assert CE_SESSION_TOOLS - CE_ONLY_TOOLS <= tool_names
     assert not tool_names & CE_ONLY_TOOLS
+    assert {"update_page", "update_page_content", "archive_page", "unarchive_page"} <= tool_names
+
+
+def test_update_page_signature_keeps_only_identity_fields_required(monkeypatch):
+    monkeypatch.setenv("PLANE_MCP_EDITION", "cloud")
+
+    parameters = _tool("update_page").parameters
+
+    assert set(parameters["required"]) == {"page_id", "project_id"}
+    assert {"name", "description_html"} <= set(parameters["properties"])
 
 
 def test_auto_mode_detects_a_self_hosted_url(monkeypatch):

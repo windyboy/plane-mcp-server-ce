@@ -128,6 +128,10 @@ Without these variables, session-only tools are hidden. Prefer a session cookie
 over an account password. The cookie is the `session-id` value from an active
 browser session and must be replaced when it expires.
 
+On Plane Cloud, page create, update, archive, unarchive, and delete use the
+public SDK/API path. On CE, page updates preserve the app API's separate name
+and content routes; `update_page` accepts either or both fields.
+
 ## CE scope
 
 CE mode exposes supported projects, work items, cycles, modules, labels,

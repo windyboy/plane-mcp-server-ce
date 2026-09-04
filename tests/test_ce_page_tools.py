@@ -5,6 +5,7 @@ import asyncio
 from fastmcp import FastMCP
 from plane.errors.errors import HttpError
 
+from plane_mcp import page_backends
 from plane_mcp.tools import pages
 
 
@@ -34,8 +35,8 @@ class _AppSession:
 
 def _tools(monkeypatch):
     app = _AppSession()
-    monkeypatch.setattr(pages, "route_via_app_session", lambda: True)
-    monkeypatch.setattr(pages, "get_app_session", lambda: app)
+    monkeypatch.setattr(page_backends, "route_via_app_session", lambda: True)
+    monkeypatch.setattr(page_backends, "get_app_session", lambda: app)
     monkeypatch.setattr(pages, "get_plane_client_context", lambda: (object(), "space"))
     mcp = FastMCP("test")
     pages.register_page_tools(mcp)
@@ -75,7 +76,7 @@ def test_create_page_reports_page_id_when_content_update_fails(monkeypatch):
 def test_ce_page_mutations_use_proven_routes(monkeypatch):
     app, tools = _tools(monkeypatch)
 
-    tools["update_page"]("page-1", "renamed", "project-1")
+    tools["update_page"]("page-1", "project-1", name="renamed")
     tools["update_page_content"]("page-1", "<p>new</p>", "project-1")
     tools["archive_page"]("page-1", "project-1")
     tools["unarchive_page"]("page-1", "project-1")
@@ -96,3 +97,29 @@ def test_ce_page_mutations_use_proven_routes(monkeypatch):
         ("get", "workspaces/space/projects/project-1/pages/page-1/", {}),
         ("delete", "workspaces/space/projects/project-1/pages/page-1/", {}),
     ]
+
+
+def test_update_page_rejects_an_empty_update_before_calling_backend(monkeypatch):
+    app, tools = _tools(monkeypatch)
+
+    try:
+        tools["update_page"]("page-1", "project-1")
+    except ValueError as exc:
+        assert "name and/or description_html" in str(exc)
+    else:
+        raise AssertionError("expected empty update to be rejected")
+
+    assert app.calls == []
+
+
+def test_ce_create_rejects_unverified_hierarchy_before_calling_app(monkeypatch):
+    app, tools = _tools(monkeypatch)
+
+    try:
+        tools["create_page"]("title", "<p>body</p>", project_id="project-1", parent_id="parent-1")
+    except ValueError as exc:
+        assert "Nested pages" in str(exc)
+    else:
+        raise AssertionError("expected unverified CE hierarchy to be rejected")
+
+    assert app.calls == []

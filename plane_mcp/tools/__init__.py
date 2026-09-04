@@ -110,9 +110,10 @@ CE_SESSION_TOOLS = frozenset(
     }
 )
 
-# These project-Page mutations have only been verified against the CE app API.
-# They must not appear on Cloud merely to raise NotImplementedError.
-CE_ONLY_TOOLS = frozenset({"update_page", "update_page_content", "archive_page", "unarchive_page"})
+# Page mutations are implemented by both the Cloud SDK and the CE session
+# backend.  Kept as a named empty set while the discovery filter migrates to
+# action-level capabilities in the later resource-tool refactor.
+CE_ONLY_TOOLS = frozenset()
 
 
 def register_tools(mcp: FastMCP) -> None:

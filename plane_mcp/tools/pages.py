@@ -3,12 +3,11 @@
 from typing import Any
 
 from fastmcp import FastMCP
-from plane.errors.errors import HttpError
-from plane.models.pages import CreatePage, Page
+from plane.models.pages import CreatePage, Page, UpdatePage
 from plane.models.work_item_pages import CreateWorkItemPage, WorkItemPage
 
-from plane_mcp.app_session import get_app_session, route_via_app_session
 from plane_mcp.client import get_plane_client_context
+from plane_mcp.page_backends import get_page_backend
 
 # Community Edition serves pages only on the app API, in *project* scope. Workspace
 # pages and work-item<->page links do not exist on CE at all (see CE_COMPAT.md).
@@ -37,19 +36,7 @@ def register_page_tools(mcp: FastMCP) -> None:
         """
         client, workspace_slug = get_plane_client_context()
 
-        if route_via_app_session():
-            if project_id is None:
-                raise ValueError(_CE_WORKSPACE_PAGES)
-            data = get_app_session().get(f"workspaces/{workspace_slug}/projects/{project_id}/pages/", params=params)
-            return [Page.model_validate(p) for p in (data or [])]
-
-        if project_id is not None:
-            response = client.pages.list_project_pages(
-                workspace_slug=workspace_slug, project_id=project_id, params=params
-            )
-        else:
-            response = client.pages.list_workspace_pages(workspace_slug=workspace_slug, params=params)
-        return response.results
+        return get_page_backend(client, workspace_slug).list_pages(project_id, params)
 
     @mcp.tool()
     def attach_page_to_work_item(
@@ -140,22 +127,7 @@ def register_page_tools(mcp: FastMCP) -> None:
         """
         client, workspace_slug = get_plane_client_context()
 
-        if route_via_app_session():
-            if project_id is None:
-                raise ValueError(_CE_WORKSPACE_PAGES)
-            data = get_app_session().get(f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/")
-            return Page.model_validate(data)
-
-        if project_id is not None:
-            return client.pages.retrieve_project_page(
-                workspace_slug=workspace_slug,
-                project_id=project_id,
-                page_id=page_id,
-            )
-        return client.pages.retrieve_workspace_page(
-            workspace_slug=workspace_slug,
-            page_id=page_id,
-        )
+        return get_page_backend(client, workspace_slug).retrieve_page(page_id, project_id)
 
     @mcp.tool()
     def create_page(
@@ -170,6 +142,8 @@ def register_page_tools(mcp: FastMCP) -> None:
         logo_props: dict[str, Any] | None = None,
         external_id: str | None = None,
         external_source: str | None = None,
+        parent_id: str | None = None,
+        collection_id: str | None = None,
     ) -> Page:
         """
         Create a page.
@@ -189,45 +163,12 @@ def register_page_tools(mcp: FastMCP) -> None:
             logo_props: Logo properties dictionary
             external_id: External system identifier
             external_source: External system source name
+            parent_id: Parent page UUID. Cloud only until a CE target supports it.
+            collection_id: Collection UUID. Cloud only until a CE target supports it.
 
         Returns:
             Created Page object
         """
-        client, workspace_slug = get_plane_client_context()
-
-        if route_via_app_session():
-            if project_id is None:
-                raise ValueError(_CE_WORKSPACE_PAGES)
-            # The CE app page-create endpoint takes name + simple metadata;
-            # collaborative content is applied on its separate endpoint below.
-            body: dict[str, Any] = {"name": name}
-            for key, value in {
-                "access": access,
-                "color": color,
-                "is_locked": is_locked,
-                "view_props": view_props,
-                "logo_props": logo_props,
-            }.items():
-                if value is not None:
-                    body[key] = value
-            app = get_app_session()
-            base = f"workspaces/{workspace_slug}/projects/{project_id}/pages/"
-            created = app.post(base, json=body)
-            page_id = created["id"]
-            if description_html:
-                # CE stores collaborative content on a separate, proven route.
-                # Do this explicitly so the tool never claims content was saved
-                # when the create endpoint accepted only the page metadata.
-                try:
-                    app.patch(f"{base}{page_id}/description/", json={"description_html": description_html})
-                except HttpError as exc:
-                    raise HttpError(
-                        f"Page {page_id} was created but its content update failed; use update_page_content to retry.",
-                        exc.status_code,
-                        exc.response,
-                    ) from exc
-            return Page.model_validate(app.get(f"{base}{page_id}/"))
-
         data = CreatePage(
             name=name,
             description_html=description_html,
@@ -239,36 +180,31 @@ def register_page_tools(mcp: FastMCP) -> None:
             logo_props=logo_props,
             external_id=external_id,
             external_source=external_source,
+            parent_id=parent_id,
+            collection_id=collection_id,
         )
 
-        if project_id is not None:
-            return client.pages.create_project_page(
-                workspace_slug=workspace_slug,
-                project_id=project_id,
-                data=data,
-            )
-        return client.pages.create_workspace_page(
-            workspace_slug=workspace_slug,
-            data=data,
-        )
+        client, workspace_slug = get_plane_client_context()
+        return get_page_backend(client, workspace_slug).create_page(data, project_id)
 
     @mcp.tool()
     def update_page(
         page_id: str,
-        name: str,
         project_id: str,
+        name: str | None = None,
+        description_html: str | None = None,
     ) -> Page:
-        """Rename a project-root page through the CE app-session API.
+        """Update a project page's name and/or HTML content.
 
-        This operation is exposed in CE only when session credentials are
-        configured. Cloud update support awaits a public SDK method.
+        At least one field is required. Cloud performs one SDK update; CE applies
+        name and content through its verified app routes, in that order.
         """
-        if not route_via_app_session():
-            raise NotImplementedError("update_page currently requires Plane CE app-session credentials.")
-        _, workspace_slug = get_plane_client_context()
-        path = f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/"
-        get_app_session().patch(path, json={"name": name})
-        return Page.model_validate(get_app_session().get(path))
+        if name is None and description_html is None:
+            raise ValueError("Pass name and/or description_html when updating a page.")
+        client, workspace_slug = get_plane_client_context()
+        return get_page_backend(client, workspace_slug).update_page(
+            page_id, project_id, UpdatePage(name=name, description_html=description_html)
+        )
 
     @mcp.tool()
     def update_page_content(
@@ -276,33 +212,20 @@ def register_page_tools(mcp: FastMCP) -> None:
         description_html: str,
         project_id: str,
     ) -> Page:
-        """Update a project-root page's HTML content through the CE app API."""
-        if not route_via_app_session():
-            raise NotImplementedError("update_page_content currently requires Plane CE app-session credentials.")
-        _, workspace_slug = get_plane_client_context()
-        base = f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/"
-        get_app_session().patch(f"{base}description/", json={"description_html": description_html})
-        return Page.model_validate(get_app_session().get(base))
+        """Compatibility entry point for updating a page's HTML content."""
+        return update_page(page_id, project_id, description_html=description_html)
 
     @mcp.tool()
     def archive_page(page_id: str, project_id: str) -> Page:
-        """Archive a project-root page through the CE app-session API."""
-        if not route_via_app_session():
-            raise NotImplementedError("archive_page currently requires Plane CE app-session credentials.")
-        _, workspace_slug = get_plane_client_context()
-        base = f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/"
-        get_app_session().post(f"{base}archive/", json={})
-        return Page.model_validate(get_app_session().get(base))
+        """Archive a project page through the SDK or CE app-session backend."""
+        client, workspace_slug = get_plane_client_context()
+        return get_page_backend(client, workspace_slug).archive_page(page_id, project_id)
 
     @mcp.tool()
     def unarchive_page(page_id: str, project_id: str) -> Page:
-        """Unarchive a project-root page through the CE app-session API."""
-        if not route_via_app_session():
-            raise NotImplementedError("unarchive_page currently requires Plane CE app-session credentials.")
-        _, workspace_slug = get_plane_client_context()
-        base = f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/"
-        get_app_session().delete(f"{base}archive/")
-        return Page.model_validate(get_app_session().get(base))
+        """Unarchive a project page through the SDK or CE app-session backend."""
+        client, workspace_slug = get_plane_client_context()
+        return get_page_backend(client, workspace_slug).unarchive_page(page_id, project_id)
 
     @mcp.tool()
     def delete_page(page_id: str, project_id: str) -> None:
@@ -312,7 +235,4 @@ def register_page_tools(mcp: FastMCP) -> None:
         read it back before deleting.
         """
         client, workspace_slug = get_plane_client_context()
-        if route_via_app_session():
-            get_app_session().delete(f"workspaces/{workspace_slug}/projects/{project_id}/pages/{page_id}/")
-            return
-        client.pages.delete_project_page(workspace_slug=workspace_slug, project_id=project_id, page_id=page_id)
+        get_page_backend(client, workspace_slug).delete_page(page_id, project_id)
