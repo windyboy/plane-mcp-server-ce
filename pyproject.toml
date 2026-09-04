@@ -13,15 +13,15 @@ authors = [
 keywords = ["mcp", "plane", "fastmcp", "ai", "automation"]
 
 dependencies = [
-    "fastmcp==3.2.0",
-    "plane-sdk==0.2.19",
+    "fastmcp==3.4.7",
+    "plane-sdk==0.2.24",
     "py-key-value-aio[redis]>=0.4.4,<0.5.0",
     "mcp==1.26.0",
     "PyJWT>=2.12.0",
     "authlib>=1.6.9",
     "boto3>=1.34.0",
-    # pydocket 0.16.6 (pinned by fastmcp 2.14.4) imports `FakeConnection` from
-    # `fakeredis.aioredis`, which was removed in fakeredis 2.35.0.
+    # fakeredis cap: 2.35.0 removed `FakeConnection` from
+    # `fakeredis.aioredis`, which pydocket (fastmcp's task runner) imports.
     "fakeredis[lua]>=2.32.1,<2.35.0",
 ]
 
@@ -54,6 +54,11 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+# Markdown reference tables in the PQL docstring cannot be wrapped without
+# breaking their rendering.
+"plane_mcp/tools/pql_reference.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

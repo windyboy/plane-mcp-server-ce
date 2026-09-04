@@ -9,7 +9,6 @@ import asyncio
 import json
 import os
 import re
-import traceback
 
 from fastmcp import Client
 
