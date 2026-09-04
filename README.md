@@ -28,13 +28,13 @@ name so existing agent configurations keep working.
 ## Features
 
 * 🏠 **CE-first**: hides API surfaces that self-hosted Community Edition cannot serve.
-* 🔐 **Two credential paths**: PAT/SDK for the public API; a browser session for the CE app-API features (pages, archive).
+* 🔐 **Two credential paths**: an API key (PAT) for the public API; a browser session for the CE app-API features (pages, archive).
 * 📄 **Useful Pages support**: CE project pages support create, retrieve, rename, HTML content updates, archive, unarchive, and archived-page deletion.
-* 🔌 **Multiple transports**: stdio, SSE, and streamable HTTP.
+* 🔌 **Two transports**: stdio and PAT-header streamable HTTP. OAuth transports were removed — Plane CE has no OAuth provider endpoints (`/auth/o/…` returns 404), so they could never work self-hosted.
 
 ## Usage
 
-The server supports three transport methods. **We recommend using `uvx`** as it doesn't require installation.
+The server supports two transport methods. **We recommend using `uvx`** as it doesn't require installation.
 
 ### Install name vs. run command
 
@@ -109,19 +109,15 @@ The `PLANE_SESSION_COOKIE` entry (or `PLANE_SESSION_EMAIL` +
 `PLANE_SESSION_PASSWORD`) is what turns on the pages and archive tools —
 the CE features this fork exists for. Omit it and those tools stay hidden.
 
-### 2. Self-hosted HTTP transports
+### 2. Self-hosted HTTP transport (PAT headers)
 
 Run the server on your own network when several clients need to reach it over
 HTTP, or when your client only speaks URL-based transports. The server listens
-on port **8211** and mounts three endpoints:
+on port **8211** and serves a single endpoint:
 
 | Endpoint | Transport | Authentication |
 |---|---|---|
-| `/http/api-key/mcp` | Streamable HTTP | PAT headers (`x-api-key` + `x-workspace-slug`) |
-| `/http/mcp` | Streamable HTTP | OAuth |
-| `/sse` | SSE (legacy) | OAuth |
-
-#### PAT (header) mode — the simple option for CE
+| `/http/api-key/mcp` | Streamable HTTP | `Authorization: Bearer <api-key>` + `x-workspace-slug` headers |
 
 The server only needs to know where your Plane instance lives; each client
 authenticates with its own API key:
@@ -153,82 +149,22 @@ from the client's environment):
       "args": [
         "mcp-remote@latest",
         "http://your-server:8211/http/api-key/mcp",
-        "--header", "x-api-key:${PLANE_API_KEY}",
-        "--header", "x-workspace-slug:${PLANE_WORKSPACE_SLUG}"
+        "--header", "Authorization: Bearer ${PLANE_API_KEY}",
+        "--header", "x-workspace-slug: ${PLANE_WORKSPACE_SLUG}"
       ]
     }
   }
 }
 ```
 
-#### OAuth mode
+The API key must travel in the `Authorization: Bearer` header — that is the
+only header the token middleware inspects — and `x-workspace-slug` names the
+workspace. To use the session-only tools (pages, archive) over HTTP, also set
+`PLANE_SESSION_*` on the *server*, as in section 1.
 
-OAuth requires a Plane OAuth client. Set `PLANE_OAUTH_PROVIDER_CLIENT_ID`,
-`PLANE_OAUTH_PROVIDER_CLIENT_SECRET`, and `PLANE_OAUTH_PROVIDER_BASE_URL` (the
-public base URL of this MCP server, e.g. `https://mcp.example.com`) before
-starting the `http` transport, then point clients at `http://your-server:8211/http/mcp`.
-OAuth tokens are kept in memory by default and are lost on restart; set
-`REDIS_HOST` / `REDIS_PORT` (and `REDIS_PASSWORD` if required) to persist them.
-
-#### SSE (legacy)
-
-The legacy SSE endpoint is served at `http://your-server:8211/sse` with the
-same OAuth setup as above. Prefer the HTTP endpoints for new clients.
-
-### 3. Plane Cloud hosted server (official)
-
-The sections above cover self-hosted Community Edition. Plane also operates a
-hosted MCP server at `mcp.plane.so` for Plane Cloud workspaces — those
-endpoints belong to the official service, not to this fork, and none of the
-CE-specific behavior applies when connecting to them. Configuration for
-clients without native remote MCP support:
-
-**OAuth**: `https://mcp.plane.so/http/mcp`
-
-```json
-{
-  "mcpServers": {
-    "plane": {
-      "command": "npx",
-      "args": ["mcp-remote@latest", "https://mcp.plane.so/http/mcp"]
-    }
-  }
-}
-```
-
-**PAT headers**: `https://mcp.plane.so/http/api-key/mcp`
-
-```json
-{
-  "mcpServers": {
-    "plane": {
-      "command": "npx",
-      "args": [
-        "mcp-remote@latest",
-        "https://mcp.plane.so/http/api-key/mcp",
-        "--header", "Authorization: Bearer ${PLANE_PAT_TOKEN}",
-        "--header", "X-Workspace-slug: ${PLANE_WORKSPACE_SLUG}"
-      ]
-    }
-  }
-}
-```
-
-**SSE (legacy)**: `https://mcp.plane.so/sse`
-
-```json
-{
-  "mcpServers": {
-    "plane": {
-      "command": "npx",
-      "args": ["mcp-remote@latest", "https://mcp.plane.so/sse"]
-    }
-  }
-}
-```
-
-OAuth authentication is handled automatically when connecting to the hosted
-server.
+> **About Plane Cloud**: this server targets self-hosted CE and authenticates
+> with API keys only. Plane Cloud users should connect to Plane's hosted MCP
+> at `https://mcp.plane.so` (OAuth or PAT) instead of running this fork.
 
 
 ## Configuration
@@ -260,27 +196,16 @@ export PLANE_WORKSPACE_SLUG="your-workspace-slug"
 export PLANE_MCP_EDITION="community"
 ```
 
-**Note**: For the self-hosted HTTP transports (section 2), set `PLANE_BASE_URL` (and `PLANE_MCP_EDITION`) on the *server*; each client then authenticates via OAuth or PAT headers. For the hosted Plane Cloud server (section 3), authentication is handled by the connection method (OAuth flow or PAT headers) and needs none of these environment variables.
-
-### OAuth redirect URIs
-
-For the OAuth HTTP/SSE transports, the server validates each client's redirect URI against an allowlist. Common MCP clients (Cursor, VS Code, Claude.ai, ChatGPT connectors, localhost) are allowed by default.
-
-To onboard a new client without a code change or release, append extra patterns via an environment variable:
-
-- `PLANE_OAUTH_ALLOWED_REDIRECT_URIS`: Comma-separated redirect URI patterns appended to the built-in allowlist.
-
-```bash
-export PLANE_OAUTH_ALLOWED_REDIRECT_URIS="https://newclient.com/cb,https://other.app/oauth/*"
-```
-
-Patterns support glob matching (`*` matches any port, path segment, or subdomain). For security, keep the host pinned and wildcard only the port/path.
+**Note**: For the self-hosted HTTP transport (section 2), set `PLANE_BASE_URL` (and `PLANE_MCP_EDITION`) on the *server*; each client then authenticates with an `Authorization: Bearer <api-key>` header plus `x-workspace-slug`.
 
 ### Logging
 
-The server emits structured JSON logs. Each tool call is logged with its tool name, duration, status, and (when available) the opaque user id and workspace slug.
+The server emits structured JSON logs. Each tool call is logged with its tool name, duration, status, and workspace slug.
 
-- `LOG_USER_INFO`: When `true`, include user info (PII such as the display name) in logs alongside the opaque user id. Defaults to `false` so PII is never logged unless explicitly opted in. Only the OAuth and PAT (header) HTTP transports carry a display name; stdio is unaffected.
+- `LOG_LEVEL`: Python log level; defaults to `INFO`. Set to `WARNING` in a
+  high-volume production deployment or `DEBUG` while troubleshooting.
+- Tool arguments and other request payloads are never logged by default.
+- `LOG_USER_INFO`: When `true`, include user info (PII such as the display name) in logs alongside the opaque user id. Defaults to `false` so PII is never logged unless explicitly opted in. Only the PAT (header) HTTP transport carries request-level auth context; stdio is unaffected.
 
 ```bash
 export LOG_USER_INFO="true"

@@ -56,7 +56,7 @@ class PlaneHeaderAuthProvider(TokenVerifier):
                     logger.warning("API key validation against Plane API failed")
                     return None
 
-                logger.info("API key validated successfully via Plane API")
+                logger.debug("API key validated successfully via Plane API")
                 expires_at = int(time.time() + 3600)
                 return AccessToken(
                     token=token,

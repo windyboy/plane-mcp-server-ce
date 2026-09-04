@@ -10,7 +10,7 @@ While we want to fix all the [issues](https://github.com/windyboy/plane-mcp-serv
 
 - Python version and OS
 - MCP client being used (Claude Desktop, etc.)
-- Transport method (stdio, HTTP, SSE)
+- Transport method (stdio or HTTP)
 - A use-case that fails
 
 Without said minimal reproduction, we won't be able to investigate all [issues](https://github.com/windyboy/plane-mcp-server-ce/issues), and the issue might not be resolved.
@@ -28,7 +28,7 @@ When opening a new issue, please use a clear and concise title that follows this
 
 **Examples:**
 
-- `Bug: OAuth token refresh fails with Redis backend`
+- `Bug: PAT header authentication fails in HTTP mode`
 - `Feature: Add support for custom fields in work items`
 - `Improvement: Better error messages for missing environment variables`
 - `Docs: Clarify PAT token setup for HTTP transport`

@@ -1,6 +1,6 @@
 [project]
 name = "plane-community-mcp"
-version = "0.5.0"
+version = "0.6.0"
 description = "Community Edition and self-hosted focused MCP server for Plane"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,16 +13,11 @@ authors = [
 keywords = ["mcp", "plane", "fastmcp", "ai", "automation"]
 
 dependencies = [
-    "fastmcp==3.4.7",
+    "fastmcp==4.0.2",
     "plane-sdk==0.2.24",
-    "py-key-value-aio[redis]>=0.4.4,<0.5.0",
-    "mcp==1.26.0",
-    "PyJWT>=2.12.0",
-    "authlib>=1.6.9",
-    "boto3>=1.34.0",
-    # fakeredis cap: 2.35.0 removed `FakeConnection` from
-    # `fakeredis.aioredis`, which pydocket (fastmcp's task runner) imports.
-    "fakeredis[lua]>=2.32.1,<2.35.0",
+    # Imported directly by the auth provider and app-session client.
+    "httpx>=0.28.1",
+    "requests>=2.31.0",
 ]
 
 [project.urls]

@@ -20,7 +20,7 @@ COPY plane_mcp/ ./plane_mcp/
 # Install the package and dependencies using uv
 RUN uv pip install --system --no-cache .
 
-# Expose port for HTTP transports (SSE, streamable-http, http)
+# Expose port for the streamable HTTP transport.
 EXPOSE 8211
 
 # Set environment variables with defaults
@@ -30,4 +30,3 @@ ENV FASTMCP_PORT=8211
 # Users can override by passing different transport as CMD
 ENTRYPOINT ["python", "-m", "plane_mcp"]
 CMD ["http"]
-

@@ -75,7 +75,7 @@ DATE FUNCTIONS
   ⚠ No date arithmetic: never today()-7 or startOfWeek()+1
 
 USER FUNCTIONS
-  currentUser()                        — resolved from OAuth token
+  currentUser()                        — resolved from the authenticated token
   membersOf("project:<uuid>")          — list of user UUIDs in project
   workspaceMembers()                   — all workspace member UUIDs
 

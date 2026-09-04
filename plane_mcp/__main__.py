@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import sys
-from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -14,9 +13,10 @@ from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from starlette.routing import Mount
 
-from plane_mcp.server import get_header_mcp, get_oauth_mcp, get_stdio_mcp
+from plane_mcp.server import get_header_mcp, get_stdio_mcp
 
 LOG_USER_INFO: bool = os.getenv("LOG_USER_INFO", "").lower() == "true"
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 
 class UserContextFilter(logging.Filter):
@@ -101,7 +101,7 @@ def configure_json_logging():
     handler.setFormatter(JSONFormatter())
     handler.addFilter(UserContextFilter())
     fastmcp_logger.addHandler(handler)
-    fastmcp_logger.setLevel(logging.INFO)
+    fastmcp_logger.setLevel(LOG_LEVEL)
     fastmcp_logger.propagate = False
 
 
@@ -112,24 +112,13 @@ logger = logging.getLogger("fastmcp.plane_mcp")
 
 class ServerMode(Enum):
     STDIO = "stdio"
-    SSE = "sse"
     HTTP = "http"
-
-
-@asynccontextmanager
-async def combined_lifespan(oauth_app, header_app, sse_app):
-    """Combine lifespans from both OAuth and Header MCP apps."""
-    # Start both lifespans
-    async with oauth_app.lifespan(oauth_app):
-        async with header_app.lifespan(header_app):
-            async with sse_app.lifespan(sse_app):
-                yield
 
 
 def main() -> None:
     """Run the MCP server."""
     if len(sys.argv) > 1 and sys.argv[1] in {"-h", "--help"}:
-        print("Usage: plane-mcp-server-ce [stdio|http|sse]")
+        print("Usage: plane-mcp-server-ce [stdio|http]")
         return
 
     server_mode = ServerMode.STDIO
@@ -149,30 +138,15 @@ def main() -> None:
     if server_mode == ServerMode.HTTP:
         prefix = os.getenv("MCP_PATH_PREFIX") or ""
 
-        oauth_mcp = get_oauth_mcp(prefix + "/http")
-        oauth_app = oauth_mcp.http_app(stateless_http=True)
         header_app = get_header_mcp().http_app(stateless_http=True)
-
-        sse_mcp = get_oauth_mcp(prefix)
-        sse_app = sse_mcp.http_app(transport="sse")
-
-        # mcp_path is appended to the auth provider's base_url to form the
-        # advertised resource URL. base_url already carries the prefix, so these
-        # stay at /mcp and /sse to avoid double-prefixing.
-        oauth_well_known = oauth_mcp.auth.get_well_known_routes(mcp_path="/mcp")
-        sse_well_known = sse_mcp.auth.get_well_known_routes(mcp_path="/sse")
 
         app = Starlette(
             routes=[
-                # Well-known routes for OAuth and Header HTTP
-                *oauth_well_known,
-                *sse_well_known,
-                # Mount both MCP servers
+                # PAT (header) endpoint: clients authenticate with
+                # x-api-key + x-workspace-slug headers.
                 Mount(prefix + "/http/api-key", app=header_app),
-                Mount(prefix + "/http", app=oauth_app),
-                Mount(prefix or "/", app=sse_app),
             ],
-            lifespan=lambda app: combined_lifespan(oauth_app, header_app, sse_app),
+            lifespan=lambda _app: header_app.lifespan(header_app),
         )
 
         app.add_middleware(
@@ -192,8 +166,9 @@ def main() -> None:
             uv_handler.setFormatter(JSONFormatter())
             uv_handler.addFilter(UserContextFilter())
             uv_logger.addHandler(uv_handler)
+            uv_logger.setLevel(LOG_LEVEL)
 
-        logger.info("Starting HTTP server at URLs: /mcp and /header/mcp")
+        logger.info("Starting HTTP server: MCP endpoint at /http/api-key/mcp (PAT headers)")
         uvicorn.run(
             app,
             host="0.0.0.0",

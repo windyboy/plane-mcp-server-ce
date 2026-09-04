@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Plane MCP Server — a Python-based Model Context Protocol server that exposes Plane's project management API as MCP tools. Built on FastMCP with the official `plane-sdk`. Supports three transport modes: stdio (local), HTTP (with OAuth or header auth), and SSE (legacy).
+Plane MCP Server — a Python-based Model Context Protocol server that exposes Plane's project management API as MCP tools. Built on FastMCP with the official `plane-sdk`. Supports two transport modes: stdio (local) and HTTP (PAT header auth). OAuth and SSE transports were removed: Plane CE exposes no OAuth provider endpoints, so those flows could never work self-hosted.
 
 ## Common Commands
 
@@ -38,23 +38,21 @@ ruff check plane_mcp/
 
 ### Entry Point & Transport Modes
 
-`plane_mcp/__main__.py` parses a positional arg (`stdio`, `http`, or `sse`) and launches the corresponding server:
+`plane_mcp/__main__.py` parses a positional arg (`stdio` or `http`) and launches the corresponding server:
 - **stdio**: Requires `PLANE_API_KEY` + `PLANE_WORKSPACE_SLUG` env vars. Runs locally.
-- **http**: Starts on port 8211 with two auth endpoints — OAuth (`/oauth/mcp`) and header-based PAT (`/http/api-key/mcp`).
-- **sse**: Legacy OAuth-only SSE transport.
+- **http**: Starts on port 8211 with a PAT-header endpoint at `/http/api-key/mcp`.
 
 ### Server Factories (`server.py`)
 
-Three factory functions (`get_oauth_mcp`, `get_header_mcp`, `get_stdio_mcp`) each create a `FastMCP` instance, register all tools, and configure the appropriate auth provider. OAuth/HTTP modes use Redis for token storage (falls back to in-memory).
+Two factory functions (`get_header_mcp`, `get_stdio_mcp`) each create a `FastMCP` instance, register all tools, and configure the appropriate auth.
 
 ### Client Context (`client.py`)
 
-`get_plane_client_context()` returns a `PlaneClientContext(client, workspace_slug)` namedtuple. It resolves credentials from the MCP request context (OAuth token or header API key) or from environment variables (stdio mode). Prefers `PLANE_INTERNAL_BASE_URL` for server-to-server calls.
+`get_plane_client_context()` returns a `PlaneClientContext(client, workspace_slug)` namedtuple. It resolves credentials from the MCP request context (header API key) or from environment variables (stdio mode). Prefers `PLANE_INTERNAL_BASE_URL` for server-to-server calls.
 
 ### Authentication (`auth/`)
 
-- `PlaneOAuthProvider` — Full OAuth flow with token verification against the Plane API.
-- `PlaneHeaderAuthProvider` — Simple header-based auth using `x-api-key` and `x-workspace-slug` headers.
+- `PlaneHeaderAuthProvider` — Token middleware auth: the API key arrives as `Authorization: Bearer`, the workspace as the `x-workspace-slug` header; the key is validated against Plane's `/api/v1/users/me/`.
 
 ### Tools (`tools/`)
 
@@ -83,8 +81,5 @@ Integration tests in `tests/test_integration.py` use `FastMCP.Client` with `Stre
 | `PLANE_API_KEY` | stdio | API key for authentication |
 | `PLANE_WORKSPACE_SLUG` | stdio | Target workspace |
 | `PLANE_BASE_URL` | all (default: https://api.plane.so) | Plane API URL |
-| `PLANE_INTERNAL_BASE_URL` | http/sse (optional) | Internal URL for server-to-server calls |
-| `REDIS_HOST` / `REDIS_PORT` | http/sse (optional) | Token storage (falls back to in-memory) |
-| `PLANE_OAUTH_PROVIDER_*` | http/sse OAuth | OAuth client credentials and base URL |
-| `PLANE_OAUTH_ALLOWED_REDIRECT_URIS` | http/sse OAuth (optional) | Comma-separated redirect URI patterns appended to the built-in allowlist (onboard clients without a release) |
+| `PLANE_INTERNAL_BASE_URL` | http (optional) | Internal URL for server-to-server calls |
 | `LOG_USER_INFO` | all (optional, default: false) | When `true`, include user info (PII such as display name) in logs alongside the opaque user id |
