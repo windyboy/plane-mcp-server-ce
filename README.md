@@ -106,6 +106,7 @@ docker run -p 8211:8211 \
 | `PLANE_API_KEY` | stdio | Personal API key. |
 | `PLANE_WORKSPACE_SLUG` | stdio | Workspace slug. |
 | `PLANE_MCP_EDITION` | Recommended | Set to `community` for CE-only tool discovery. |
+| `PLANE_CE_CAPABILITIES` | No | Comma-separated CE capability keys (e.g. `pages.parent_id`) enabled beyond the verified baseline. |
 | `PLANE_INTERNAL_BASE_URL` | No | Internal Plane URL for server-to-server calls. |
 | `MCP_PATH_PREFIX` | No | HTTP route prefix. |
 | `LOG_LEVEL` | No | Python log level; default `INFO`. |
@@ -128,9 +129,30 @@ Without these variables, session-only tools are hidden. Prefer a session cookie
 over an account password. The cookie is the `session-id` value from an active
 browser session and must be replaced when it expires.
 
-On Plane Cloud, page create, update, archive, unarchive, and delete use the
-public SDK/API path. On CE, page updates preserve the app API's separate name
-and content routes; `update_page` accepts either or both fields.
+Page operations are exposed through the `page(action=...)` resource tool
+(`list`, `retrieve`, `create`, `update`, `archive`, `unarchive`, `delete`).
+The previous per-operation names below remain callable but are hidden from
+discovery, so existing clients keep working. `update_page` /
+`page(action="update")` accepts `name` and/or `description_html`; on CE they
+are applied through the app API's separate name and content routes, in that
+order. On Plane Cloud all page actions use the public SDK/API path.
+
+| Old tool | Replacement |
+|---|---|
+| `list_pages` | `page(action="list")` |
+| `retrieve_page` | `page(action="retrieve")` |
+| `create_page` | `page(action="create")` |
+| `update_page` | `page(action="update")` |
+| `update_page_content` | `page(action="update", description_html=…)` |
+| `archive_page` | `page(action="archive")` |
+| `unarchive_page` | `page(action="unarchive")` |
+| `delete_page` | `page(action="delete")` |
+
+On CE, `parent_id`/`collection_id` on `page(action="create")` are rejected
+before any write (silently ignored on every target probed so far). Set
+`PLANE_CE_CAPABILITIES` (comma-separated, e.g. `pages.parent_id`) to enable
+them on a target you have verified yourself; see
+[CE_COMPAT.md](CE_COMPAT.md).
 
 ## CE scope
 

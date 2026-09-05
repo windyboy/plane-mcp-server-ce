@@ -105,11 +105,19 @@ The following capabilities exist only under CE's session-authenticated app API
 |---|---|---|
 | `manage_work_item_archive` | `POST`/`DELETE` `…/issues/{id}/archive/` | archive/unarchive completed or cancelled items |
 | `list_archived_work_items` | `GET` `…/archived-issues/` | — |
-| `list_pages` / `retrieve_page` / `create_page` | `…/projects/{id}/pages/` | project only |
-| `update_page` | `PATCH …/projects/{id}/pages/{page_id}/` plus the description route when needed | project only; unified tool applies name then content |
-| `update_page_content` | `PATCH …/projects/{id}/pages/{page_id}/description/` | project only; compatibility entry point |
-| `archive_page` / `unarchive_page` | `POST` / `DELETE` `…/projects/{id}/pages/{page_id}/archive/` | project only; Cloud uses equivalent SDK methods |
-| `delete_page` | `DELETE …/projects/{id}/pages/{page_id}/` | page must already be archived |
+| `page(action="list"|"retrieve"|"create")` | `…/projects/{id}/pages/` | project only |
+| `page(action="update")` | `PATCH …/projects/{id}/pages/{page_id}/` plus the description route when needed | project only; applies name then content |
+| `page(action="archive"|"unarchive")` | `POST` / `DELETE` `…/projects/{id}/pages/{page_id}/archive/` | project only; Cloud uses equivalent SDK methods |
+| `page(action="delete")` | `DELETE …/projects/{id}/pages/{page_id}/` | page must already be archived |
+
+Page operations are served by the `page(action=...)` resource tool. The
+previous per-operation names (`list_pages`, `create_page`, `update_page`,
+`update_page_content`, …) remain callable as compatibility aliases but are
+hidden from discovery by `PlaneToolVisibilityMiddleware` — the same migration
+pattern as the official Plane MCP. Without session credentials on CE, the
+`page` tool is hidden as well, and direct calls fail fast with a clear
+credentials error from `page_backends.get_page_backend` instead of a cryptic
+401/404.
 
 `plane_mcp/app_session.py` provides an opt-in bridge. It logs into the app with
 CSRF plus `/auth/sign-in/`, keeps the `session-id` cookie, and routes only these
@@ -151,6 +159,12 @@ ignored. Both probes archived and deleted every temporary page.
 Until a target CE version demonstrates different behavior, the MCP page surface
 must not expose `parent_id` or `collection_id` for CE writes. Collection actions
 must fail in backend pre-flight before any write is sent.
+
+The runtime gate is `plane_mcp/ce_capabilities.py`: the default capability set
+is the verified baseline (empty), and `PLANE_CE_CAPABILITIES` (comma-separated
+keys, e.g. `pages.parent_id`) explicitly overrides it for a target you have
+probed yourself. When a capability key is enabled, the CE create body forwards
+the corresponding field instead of rejecting it.
 
 ---
 

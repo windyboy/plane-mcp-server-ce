@@ -4,10 +4,32 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Sequence
 from typing import Any
 
-from fastmcp.server.middleware import MiddlewareContext
+from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
+from fastmcp.tools import Tool
+
+
+class PlaneToolVisibilityMiddleware(Middleware):
+    """Keep compatibility-alias tools callable but out of MCP discovery.
+
+    ``tools/list`` responses drop the hidden names; ``tools/call`` is untouched,
+    so existing clients keep working while new clients see only the canonical
+    resource tools. See PAGE_ALIAS_TOOLS in ``plane_mcp.tools``.
+    """
+
+    def __init__(self, hidden_tools: frozenset[str]) -> None:
+        self.hidden_tools = frozenset(hidden_tools)
+
+    async def on_list_tools(
+        self,
+        context: MiddlewareContext[Any],
+        call_next: Any,
+    ) -> Sequence[Tool]:
+        tools = await call_next(context)
+        return [tool for tool in tools if tool.name not in self.hidden_tools]
 
 
 class PlaneLoggingMiddleware(StructuredLoggingMiddleware):
@@ -34,9 +56,7 @@ class PlaneLoggingMiddleware(StructuredLoggingMiddleware):
         message["event"] = "tool_success"
         return self._with_tool_name(context, message)
 
-    def _create_error_message(
-        self, context: MiddlewareContext[Any], start_time: float, error: Exception
-    ) -> dict:
+    def _create_error_message(self, context: MiddlewareContext[Any], start_time: float, error: Exception) -> dict:
         message = super()._create_error_message(context, start_time, error)
         message["event"] = "tool_error"
         return self._with_tool_name(context, message)

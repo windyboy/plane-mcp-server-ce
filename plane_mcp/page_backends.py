@@ -13,7 +13,12 @@ from plane import PlaneClient
 from plane.errors.errors import HttpError
 from plane.models.pages import CreatePage, Page, UpdatePage
 
-from plane_mcp.app_session import get_app_session, route_via_app_session
+from plane_mcp.app_session import (
+    get_app_session,
+    is_community_edition,
+    session_auth_available,
+)
+from plane_mcp.ce_capabilities import PAGES_COLLECTION_ID, PAGES_PARENT_ID, ce_capabilities
 
 
 class PageBackend(Protocol):
@@ -100,18 +105,27 @@ class CEPageBackend:
         # CE has a separate content route; only metadata verified by the probe is
         # sent on create. The v1.4.1 probe showed both hierarchy fields are
         # silently ignored, so reject them before any write.
-        if data.parent_id is not None:
-            raise ValueError("Nested pages are not available on this Plane Community Edition target.")
-        if data.collection_id is not None:
-            raise ValueError("Page collections are not available on this Plane Community Edition target.")
-        body = {key: value for key, value in {
-            "access": data.access,
-            "color": data.color,
-            "is_locked": data.is_locked,
-            "view_props": data.view_props,
-            "logo_props": data.logo_props,
-        }.items() if value is not None}
+        capabilities = ce_capabilities()
+        if data.parent_id is not None and PAGES_PARENT_ID not in capabilities:
+            raise ValueError("Nested pages are not verified on this Plane Community Edition target.")
+        if data.collection_id is not None and PAGES_COLLECTION_ID not in capabilities:
+            raise ValueError("Page collections are not verified on this Plane Community Edition target.")
+        body = {
+            key: value
+            for key, value in {
+                "access": data.access,
+                "color": data.color,
+                "is_locked": data.is_locked,
+                "view_props": data.view_props,
+                "logo_props": data.logo_props,
+            }.items()
+            if value is not None
+        }
         body["name"] = data.name
+        if data.parent_id is not None:
+            body["parent_id"] = data.parent_id
+        if data.collection_id is not None:
+            body["collection_id"] = data.collection_id
         base = self._base(project_id)
         created = get_app_session().post(base, json=body)
         page_id = created["id"]
@@ -137,12 +151,11 @@ class CEPageBackend:
             try:
                 app.patch(f"{base}{page_id}/description/", json={"description_html": data.description_html})
             except HttpError as exc:
-                completed = "name" if data.name is not None else "no fields"
-                raise HttpError(
-                    f"Page {page_id} was only partially updated ({completed}); retry the description_html update.",
-                    exc.status_code,
-                    exc.response,
-                ) from exc
+                if data.name is not None:
+                    detail = f"Page {page_id} was only partially updated (name); retry the description_html update."
+                else:
+                    detail = f"Page {page_id} was not updated; retry the description_html update."
+                raise HttpError(detail, exc.status_code, exc.response) from exc
         return self.retrieve_page(page_id, project_id)
 
     def archive_page(self, page_id: str, project_id: str) -> Page:
@@ -159,8 +172,20 @@ class CEPageBackend:
         get_app_session().delete(f"{self._base(project_id)}{page_id}/")
 
 
+_CE_SESSION_REQUIRED = (
+    "Plane Community Edition page operations require app-session credentials; "
+    "set PLANE_SESSION_COOKIE or PLANE_SESSION_EMAIL + PLANE_SESSION_PASSWORD."
+)
+
+
 def get_page_backend(client: PlaneClient, workspace_slug: str) -> PageBackend:
-    """Resolve the backend for this call; do not cache request-specific state."""
-    if route_via_app_session():
+    """Resolve the backend for this call; do not cache request-specific state.
+
+    CE without session credentials fails fast here instead of sending a PAT to
+    app-API-only routes that would answer a cryptic 401/404.
+    """
+    if is_community_edition():
+        if not session_auth_available():
+            raise ValueError(_CE_SESSION_REQUIRED)
         return CEPageBackend(workspace_slug)
     return CloudPageBackend(client, workspace_slug)
