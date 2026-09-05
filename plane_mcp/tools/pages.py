@@ -10,8 +10,8 @@ from plane_mcp.client import get_plane_client_context
 from plane_mcp.page_backends import get_page_backend
 
 # Community Edition serves pages only on the app API, in *project* scope. Workspace
-# pages and work-item<->page links do not exist on CE at all (see CE_COMPAT.md).
-_CE_WORKSPACE_PAGES = "Workspace-level pages are not available on Plane Community Edition; pass project_id."
+# pages and work-item<->page links do not exist on CE at all; the CE backend
+# rejects workspace-scope calls in pre-flight (see CE_COMPAT.md).
 
 # -- resource tool (official-style ``page(action=...)``) ----------------------
 #
@@ -286,12 +286,16 @@ def register_page_tools(mcp: FastMCP) -> None:
 
         Actions and their required arguments (validated before any request):
         - ``list``: list project pages (``project_id``) or workspace pages (omit); optional ``params``
-        - ``retrieve``: fetch one page (``page_id``; ``project_id`` optional on Cloud)
-        - ``create``: create a page (``name``; ``project_id`` optional on Cloud)
+        - ``retrieve``: fetch one page (``page_id``; ``project_id`` optional)
+        - ``create``: create a page (``name``; ``project_id`` optional)
         - ``update``: change name and/or content (``page_id``, ``project_id``,
           plus at least one of ``name``/``description_html``)
         - ``archive`` / ``unarchive``: toggle archived state (``page_id``, ``project_id``)
         - ``delete``: delete an archived page (``page_id``, ``project_id``)
+
+        Omitting ``project_id`` targets workspace pages, a Plane Cloud capability:
+        on Community Edition every page action requires ``project_id`` and
+        workspace-scope calls are rejected before any request.
 
         ``parent_id``/``collection_id`` (create only) are Cloud capabilities; on CE
         they are rejected before any write unless verified for the target.
