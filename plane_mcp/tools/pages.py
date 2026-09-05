@@ -13,6 +13,33 @@ from plane_mcp.page_backends import get_page_backend
 # pages and work-item<->page links do not exist on CE at all (see CE_COMPAT.md).
 _CE_WORKSPACE_PAGES = "Workspace-level pages are not available on Plane Community Edition; pass project_id."
 
+# -- resource tool (official-style ``page(action=...)``) ----------------------
+#
+# One tool per resource, mirroring the official Plane MCP surface. The
+# per-operation tool names above stay callable as compatibility aliases but are
+# hidden from discovery (see PAGE_ALIAS_TOOLS in plane_mcp.tools).
+
+_PAGE_ACTION_REQUIRED: dict[str, frozenset[str]] = {
+    "list": frozenset(),
+    "retrieve": frozenset({"page_id"}),
+    "create": frozenset({"name"}),
+    "update": frozenset({"page_id", "project_id"}),
+    "archive": frozenset({"page_id", "project_id"}),
+    "unarchive": frozenset({"page_id", "project_id"}),
+    "delete": frozenset({"page_id", "project_id"}),
+}
+
+
+def _validate_page_action(action: str, provided: dict[str, Any]) -> None:
+    """Reject unknown actions and missing required arguments before any request."""
+    if action not in _PAGE_ACTION_REQUIRED:
+        raise ValueError(f"Unknown page action {action!r}; choose one of: {', '.join(sorted(_PAGE_ACTION_REQUIRED))}.")
+    missing = _PAGE_ACTION_REQUIRED[action] - {key for key, value in provided.items() if value is not None}
+    if missing:
+        raise ValueError(f"page action {action!r} requires {', '.join(sorted(missing))}.")
+    if action == "update" and provided.get("name") is None and provided.get("description_html") is None:
+        raise ValueError("page action 'update' requires name and/or description_html.")
+
 
 def register_page_tools(mcp: FastMCP) -> None:
     """Register all page-related tools with the MCP server."""
@@ -229,10 +256,85 @@ def register_page_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     def delete_page(page_id: str, project_id: str) -> None:
-        """Delete an archived project-root page through the CE app-session API.
+        """Delete an archived project page.
 
-        Plane CE rejects deletion of an active page; call ``archive_page`` and
-        read it back before deleting.
+        Both Cloud and CE reject deleting an active page; call ``archive_page``
+        and read it back before deleting.
         """
         client, workspace_slug = get_plane_client_context()
         get_page_backend(client, workspace_slug).delete_page(page_id, project_id)
+
+    @mcp.tool()
+    def page(
+        action: str,
+        page_id: str | None = None,
+        project_id: str | None = None,
+        name: str | None = None,
+        description_html: str | None = None,
+        parent_id: str | None = None,
+        collection_id: str | None = None,
+        params: dict[str, Any] | None = None,
+        access: int | None = None,
+        color: str | None = None,
+        is_locked: bool | None = None,
+        view_props: dict[str, Any] | None = None,
+        logo_props: dict[str, Any] | None = None,
+        external_id: str | None = None,
+        external_source: str | None = None,
+    ) -> Any:
+        """Operate on Plane pages through one resource tool, selected by ``action``.
+
+        Actions and their required arguments (validated before any request):
+        - ``list``: list project pages (``project_id``) or workspace pages (omit); optional ``params``
+        - ``retrieve``: fetch one page (``page_id``; ``project_id`` optional on Cloud)
+        - ``create``: create a page (``name``; ``project_id`` optional on Cloud)
+        - ``update``: change name and/or content (``page_id``, ``project_id``,
+          plus at least one of ``name``/``description_html``)
+        - ``archive`` / ``unarchive``: toggle archived state (``page_id``, ``project_id``)
+        - ``delete``: delete an archived page (``page_id``, ``project_id``)
+
+        ``parent_id``/``collection_id`` (create only) are Cloud capabilities; on CE
+        they are rejected before any write unless verified for the target.
+
+        Returns:
+            Page, list of Page objects, or None for delete
+        """
+        _validate_page_action(
+            action,
+            {
+                "page_id": page_id,
+                "project_id": project_id,
+                "name": name,
+                "description_html": description_html,
+            },
+        )
+        client, workspace_slug = get_plane_client_context()
+        backend = get_page_backend(client, workspace_slug)
+        if action == "list":
+            return backend.list_pages(project_id, params)
+        if action == "retrieve":
+            return backend.retrieve_page(page_id, project_id)
+        if action == "create":
+            return backend.create_page(
+                CreatePage(
+                    name=name,
+                    description_html=description_html or "",
+                    access=access,
+                    color=color,
+                    is_locked=is_locked,
+                    view_props=view_props,
+                    logo_props=logo_props,
+                    external_id=external_id,
+                    external_source=external_source,
+                    parent_id=parent_id,
+                    collection_id=collection_id,
+                ),
+                project_id,
+            )
+        if action == "update":
+            return backend.update_page(page_id, project_id, UpdatePage(name=name, description_html=description_html))
+        if action == "archive":
+            return backend.archive_page(page_id, project_id)
+        if action == "unarchive":
+            return backend.unarchive_page(page_id, project_id)
+        return backend.delete_page(page_id, project_id)

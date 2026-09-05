@@ -98,7 +98,15 @@ CE_SESSION_TOOLS = frozenset(
     {
         "manage_work_item_archive",
         "list_archived_work_items",
-        # Project pages (workspace pages and work-item page links are Cloud-only).
+    }
+)
+
+# Pages are exposed through the ``page(action=...)`` resource tool. The previous
+# per-operation names remain callable as compatibility aliases but are hidden
+# from discovery by PlaneToolVisibilityMiddleware — mirroring the official
+# Plane MCP migration, where old tool names stay invokable while undiscoverable.
+PAGE_ALIAS_TOOLS = frozenset(
+    {
         "list_pages",
         "retrieve_page",
         "create_page",
@@ -109,11 +117,21 @@ CE_SESSION_TOOLS = frozenset(
         "delete_page",
     }
 )
+PAGE_RESOURCE_TOOL = "page"
 
-# Page mutations are implemented by both the Cloud SDK and the CE session
-# backend.  Kept as a named empty set while the discovery filter migrates to
-# action-level capabilities in the later resource-tool refactor.
-CE_ONLY_TOOLS = frozenset()
+
+def hidden_discovery_tools() -> frozenset[str]:
+    """Tool names that stay callable but are excluded from MCP discovery.
+
+    The page aliases are always hidden; on CE without app-session credentials the
+    ``page`` resource tool is hidden too (its operations are all session-only on
+    CE). Calls to hidden tools still resolve and fail with a clear error from
+    ``plane_mcp.page_backends.get_page_backend`` instead of a cryptic 401/404.
+    """
+    hidden = set(PAGE_ALIAS_TOOLS)
+    if is_community_edition() and not session_auth_available():
+        hidden.add(PAGE_RESOURCE_TOOL)
+    return frozenset(hidden)
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -149,7 +167,4 @@ def register_tools(mcp: FastMCP) -> None:
         if not session_auth_available():
             hidden |= CE_SESSION_TOOLS
         for tool_name in hidden:
-            mcp.local_provider.remove_tool(tool_name)
-    else:
-        for tool_name in CE_ONLY_TOOLS:
             mcp.local_provider.remove_tool(tool_name)
