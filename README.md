@@ -9,11 +9,76 @@ MCP server for self-hosted Plane Community Edition.
 
 ## Install
 
+Python 3.10 or later is required. Package: `plane-community-mcp`; command:
+`plane-mcp-server-ce`.
+
+`uvx` (no install; runs the latest release, or a pinned one):
+
 ```bash
 uvx --from plane-community-mcp plane-mcp-server-ce --help
+uvx --from plane-community-mcp==0.7.0 plane-mcp-server-ce --help
 ```
 
-Python 3.10 or later is required.
+`pip` / `pipx`:
+
+```bash
+pip install plane-community-mcp
+pipx install plane-community-mcp
+```
+
+Docker (see [HTTP](#http) for run flags):
+
+```bash
+docker build -t plane-mcp-server-ce .
+```
+
+Verify an installation:
+
+```bash
+plane-mcp-server-ce --help          # pip/pipx
+uvx --from plane-community-mcp plane-mcp-server-ce --help   # uvx
+```
+
+## Update
+
+How to move an existing setup to a new release.
+
+`uvx` caches the resolved package; pass `--refresh` to pick up the new release:
+
+```bash
+uvx --refresh --from plane-community-mcp plane-mcp-server-ce --help
+```
+
+MCP client configs using `uvx --from plane-community-mcp …` keep the cache per
+client; add `--refresh` once after upgrading, or run the command above
+manually, then restart the client. Pinned configs (`==x.y.z`) must be edited
+to the new version.
+
+`pip` / `pipx`:
+
+```bash
+pip install --upgrade plane-community-mcp
+pipx upgrade plane-community-mcp
+```
+
+Docker: rebuild the image so the new version is baked in:
+
+```bash
+git pull && docker build -t plane-mcp-server-ce .
+```
+
+### Upgrading to 0.7.0
+
+- Pages are served by one resource tool, `page(action=...)`, with actions
+  `list`, `retrieve`, `create`, `update`, `archive`, `unarchive`, `delete`.
+  The previous per-operation tools (`create_page`, `update_page`, …) remain
+  callable but no longer appear in `tools/list`; clients that cache tool lists
+  should refresh them.
+- `update_page` now takes `(page_id, project_id, name=None,
+  description_html=None)`. MCP calls use named arguments and are unaffected;
+  positional callers must switch to named arguments.
+- On CE without session credentials, page tools are hidden and direct calls
+  fail with a clear credentials error instead of a cryptic 401/404.
 
 ## Stdio
 
